@@ -19,11 +19,11 @@ A desktop app that downloads, tracks and repackages game mods, and keeps them on
 - Download the zip for your platform from [Releases](../../releases) and extract it anywhere.
 - The app keeps its data next to itself, so move the folder as a whole.
 
-| Platform | Notes |
-|---|---|
-| Windows | Not code signed, so SmartScreen may warn on first launch |
-| macOS | Not notarized; run `xattr -dr com.apple.quarantine NXDesk.app` |
-| Linux | Needs glibc 2.35 or newer |
+| Platform | Notes                                                          |
+| -------- | -------------------------------------------------------------- |
+| Windows  | Not code signed, so SmartScreen may warn on first launch       |
+| macOS    | Not notarized; run `xattr -dr com.apple.quarantine NXDesk.app` |
+| Linux    | Needs glibc 2.35 or newer                                      |
 
 ## Usage
 
@@ -41,7 +41,7 @@ A desktop app that downloads, tracks and repackages game mods, and keeps them on
 - A game counts as downloaded when its folder holds that zip.
 - **Download** takes new games, **Re-download** the downloaded ones; with several rows selected, only those.
 - **Upload to GitHub** sends each finished mod to the release named after the catalog folder.
-  - **Delete local copy** removes it from disk once the release records it.
+   - **Delete local copy** removes it from disk once the release records it.
 - Search, **Genres** and **Status** filter the list; ≡ switches between **List** and **Grid**.
 - Editing a catalog's **Name** also renames its folder and, with `gh` signed in, its release.
 - **Settings** (Ctrl+,): font, compression, size units, SteamGridDB key, notifications, log folder.
@@ -74,12 +74,12 @@ A desktop app that downloads, tracks and repackages game mods, and keeps them on
 
 - Builds embed these values; from source, set them in `.env` (see `.env.example`). Real environment variables win.
 
-| Variable | Description |
-|---|---|
-| `NX_DESK_RELEASES_URL` | GitHub API URL of the latest release, for update checks |
-| `NX_DESK_TITLE_IDS_URL` | Link to the `title_ids.json` list |
-| `NX_DESK_PORTS_URL` | Optional link to the `switch-ports.json` list |
-| `NX_DESK_USER_AGENT` | Optional User-Agent; blank uses `Mozilla/5.0` |
+| Variable                | Description                                             |
+| ----------------------- | ------------------------------------------------------- |
+| `NX_DESK_RELEASES_URL`  | GitHub API URL of the latest release, for update checks |
+| `NX_DESK_TITLE_IDS_URL` | Link to the `title_ids.json` list                       |
+| `NX_DESK_PORTS_URL`     | Optional link to the `switch-ports.json` list           |
+| `NX_DESK_USER_AGENT`    | Optional User-Agent; blank uses `Mozilla/5.0`           |
 
 ## Development
 
@@ -100,7 +100,7 @@ make clean   # remove build output and caches
 ## Releases
 
 - Pushing to `main` runs semantic-release on Conventional Commits:
-  - `fix:` is a patch, `feat:` a minor, `feat!:` a major release.
-  - `docs:`, `chore:`, `refactor:` and `test:` release nothing.
+   - `fix:` is a patch, `feat:` a minor, `feat!:` a major release.
+   - `docs:`, `chore:`, `refactor:` and `test:` release nothing.
 - The workflow builds four zips and publishes the release once all are attached.
 - Packaged apps check for a new release at startup and every 30 minutes.

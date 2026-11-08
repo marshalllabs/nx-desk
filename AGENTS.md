@@ -5,7 +5,7 @@
 - Read `../AGENTS.md` for shared rules and `../STATE.md` for current decisions and progress.
 - Update this project's section in `../STATE.md` after completing a task.
 - Keep repository guidance here; `CLAUDE.md` only imports shared instructions for Claude Code.
-- Keep source-specific catalog mapping in mod-catalogs; check both projects before changing their contract.
+- Keep source-specific catalog mapping in nx-index; check both projects before changing their contract.
 
 ## Commands
 

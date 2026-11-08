@@ -12,7 +12,7 @@ def game_kind(title: str) -> str:
     return "Game" if not low else "Update" if low == 0x800 else "DLC"
 
 
-# The merged list from the mod-catalogs repository: id, name, section and detail for each title.
+# The merged list from the nx-index repository: id, name, section and detail for each title.
 def parse_title_ids(data: object) -> list[TitleRow]:
     rows: list[TitleRow] = []
 
