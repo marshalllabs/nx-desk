@@ -69,8 +69,12 @@ class UploadSource(GitHubJob):
                     nodes.append(node)
 
         with self.lock:
-            # A scan can land during an upload, which must keep showing how far each folder got.
-            known = {folder.name: folder for folder in self.upload_job.folders}
+            # Only an active upload keeps progress; a refresh recomputes finished row states.
+            known = {
+                folder.name: folder
+                for folder in self.upload_job.folders
+                if self.upload_job.phase == "uploading" or folder.status == "working"
+            }
 
             for unit in units:
                 old = known.get(unit.name, unit)

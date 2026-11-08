@@ -163,6 +163,7 @@ class Catalogs(CatalogMoves):
             if self.checking or not self.catalog:
                 return
 
+            self._clear_failed_jobs()
             self.checking = True
             catalog = self.catalog
             source = (catalog.url, catalog.mapping)

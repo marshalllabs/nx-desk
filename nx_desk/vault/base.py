@@ -159,7 +159,15 @@ class VaultBase:
         active = next((c for c in self.catalogs if c.folder == registry.active), None)
         self._use_catalog(catalog=active or (self.catalogs[0] if self.catalogs else None))
 
+    def _clear_failed_jobs(self) -> None:
+        with self.lock:
+            failed = [entry_id for entry_id, job in self.jobs.items() if job.phase == "error"]
+
+            for entry_id in failed:
+                del self.jobs[entry_id]
+
     def _use_catalog(self, catalog: Catalog | None) -> None:
+        self._clear_failed_jobs()
         self.catalog: Catalog | None = catalog
         folder = catalog.folder if catalog else NO_CATALOG
         self.root = self._download_root() / folder
