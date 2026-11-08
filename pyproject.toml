@@ -1,0 +1,27 @@
+# Dependencies only; tool settings live in .ruff.toml, mypy.ini and pyrightconfig.json.
+[project]
+name = "nx-desk"
+# Releases are versioned by semantic-release tags; builds read NX_DESK_VERSION.
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "keyring==25.7.0",
+    "pydantic==2.14.2",
+    "PySide6-Essentials==6.12.0",
+]
+
+[dependency-groups]
+build = ["certifi", "pyinstaller>=6.22,<7"]
+dev = [
+    "mypy==2.4.1",
+    # pre-commit needs Python 3.11+; NX Desk supports Python 3.12.
+    "pre-commit==4.7.0; python_version >= '3.11'",
+    "pyright==1.1.414",
+    "ruff==0.17.3",
+]
+
+[tool.uv]
+# An app run from source, not a package to install.
+package = false
+# pyright resolves every import, so a local setup needs the build packages too.
+default-groups = ["dev", "build"]

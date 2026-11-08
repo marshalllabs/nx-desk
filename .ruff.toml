@@ -1,0 +1,17 @@
+line-length = 120
+target-version = "py310"
+extend-exclude = ["dist"]
+
+[lint]
+# COM812 adds a trailing comma to any split bracket, so the formatter puts one item per line.
+select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM", "RUF", "PIE", "COM812"]
+ignore = [
+    "E501",   # line length is the formatter's job
+    "RUF001", # flags Vietnamese text
+    "RUF012", # mutable class attributes, a style choice
+    "SIM105", # contextlib.suppress, a style choice
+]
+
+[lint.per-file-ignores]
+# Scripts add the project root to sys.path before importing the package.
+"scripts/*" = ["E402"]
