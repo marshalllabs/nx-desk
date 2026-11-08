@@ -1,0 +1,113 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.13.7
+      # pyright resolves every import, so the build packages are needed too (the default groups).
+      - run: uv sync --locked --python "${{ steps.python.outputs.python-path }}"
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync python -B scripts/space_blocks.py --check
+      - run: uv run --no-sync mypy
+      - run: uv run --no-sync pyright
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.13.7
+      # The tests need the app's own dependencies, such as pydantic, but no dev or build tools.
+      - run: uv sync --locked --no-default-groups --python "${{ steps.python.outputs.python-path }}"
+      - run: uv run --no-sync python -m unittest discover -s tests -v
+
+  release:
+    if: github.event_name == 'push'
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.semantic.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - id: semantic
+        run: npx --yes -p semantic-release@24 -p @semantic-release/exec@6 semantic-release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  build:
+    needs: [test, release]
+    if: >-
+      !cancelled() && needs.test.result == 'success' &&
+      (needs.release.outputs.tag != '' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install uv==0.13.7
+      - run: uv sync --locked --no-default-groups --group build --python "${{ steps.python.outputs.python-path }}"
+      - run: uv run --no-sync python scripts/build.py
+        env:
+          NX_DESK_RELEASES_URL: ${{ secrets.NX_DESK_RELEASES_URL }}
+          NX_DESK_TITLE_IDS_URL: ${{ secrets.NX_DESK_TITLE_IDS_URL }}
+          NX_DESK_PORTS_URL: ${{ secrets.NX_DESK_PORTS_URL }}
+          NX_DESK_VERSION: ${{ needs.release.outputs.tag }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: NXDesk-${{ matrix.os }}
+          path: dist/*.zip
+          if-no-files-found: error
+      - if: needs.release.outputs.tag != ''
+        shell: bash
+        run: gh release upload "${{ needs.release.outputs.tag }}" dist/*.zip --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish:
+    # The app follows the latest published release, so it must only see one with every zip.
+    needs: [release, build]
+    if: needs.release.outputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the draft once every platform is attached
+        run: |
+          count=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets | length')
+          test "$count" -eq "$EXPECTED"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+          EXPECTED: "4"
