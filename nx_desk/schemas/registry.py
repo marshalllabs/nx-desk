@@ -30,6 +30,7 @@ class Registry(BaseModel):
     compression: object = None
     # How the Switch Ports tab shows its entries: "list" or "grid"; anything else means the list.
     ports_view: str = "list"
+    homebrews_view: str = "list"
     # How the Catalog tab shows its games: "list" or "grid"; anything else means the list.
     catalog_view: str = "list"
     # Where the SteamGridDB API key is kept; the key itself is never written here.

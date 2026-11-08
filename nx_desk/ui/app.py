@@ -17,6 +17,7 @@ from . import style
 from .catalog_manager.manager import CatalogManager
 from .catalog_tab.tab import CatalogTab
 from .dialogs import ask_yes_no, run_dialog, show_message
+from .homebrews_tab.tab import HomebrewsTab
 from .notifier import Notifier
 from .ports_tab.tab import PortsTab
 from .settings_window import SettingsWindow
@@ -65,9 +66,11 @@ class App(QMainWindow):
         self.catalog = CatalogTab(app=self)
         self.uploads = UploadTab(app=self)
         self.ports = PortsTab(app=self)
+        self.homebrews = HomebrewsTab(app=self)
         self.title_ids = TitleTab(app=self)
         self.tabs.addTab(self.catalog, "Catalog")
         self.tabs.addTab(self.ports, "Switch Ports")
+        self.tabs.addTab(self.homebrews, "Homebrews")
         self.tabs.addTab(self.title_ids, "Title IDs")
         self.tabs.addTab(self.uploads, "GitHub")
         layout.addWidget(self.tabs, 1)
@@ -79,7 +82,7 @@ class App(QMainWindow):
         self.footer.setSizePolicy(keep_space)
         foot.addWidget(self.footer, 1)
         self.tabs.currentChanged.connect(lambda index: self.footer.setVisible(self.tabs.widget(index) is self.catalog))
-        # Both art tabs share this note, at the right of the footer, while SteamGridDB is asked.
+        # Artwork tabs share this note, at the right of the footer, while SteamGridDB is asked.
         self.art_note = label(text="", role="muted")
         self.art_note.hide()
         self.art_spinner = Spinner(target=self.art_note)
@@ -107,6 +110,7 @@ class App(QMainWindow):
         self.timer.start()
         self.uploads.auto_load()
         self.ports.load()
+        self.homebrews.load()
         self.title_ids.load()
 
     # One Settings window instead of a menu of submenus.
@@ -138,7 +142,7 @@ class App(QMainWindow):
     def focus_search(self) -> None:
         current = self.tabs.currentWidget()
 
-        if isinstance(current, (CatalogTab, UploadTab, PortsTab, TitleTab)):
+        if isinstance(current, (CatalogTab, UploadTab, PortsTab, HomebrewsTab, TitleTab)):
             current.focus_search()
 
     def step_tab(self, step: int) -> None:
@@ -171,6 +175,7 @@ class App(QMainWindow):
         self.catalog.refresh(snapshot=snapshot, github=github)
         self.uploads.paint(job=github)
         self.ports.paint(job=self.vault.port_snapshot())
+        self.homebrews.paint(job=self.vault.homebrew_snapshot())
         self.title_ids.paint(job=self.vault.title_snapshot())
         self.paint_app_update(update=snapshot.app_update, job=snapshot.app_update_job)
         self.paint_art_note()

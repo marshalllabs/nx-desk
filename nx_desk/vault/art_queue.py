@@ -1,9 +1,11 @@
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..catalog.ports import card_url
 from ..config import ART_WORKERS
+from ..schemas.artwork import ArtSubject
 from ..schemas.port import Port
 
 if TYPE_CHECKING:
@@ -14,22 +16,24 @@ if TYPE_CHECKING:
 # entries it wants, the chosen one first, and a few threads take them in order. A new list of wanted
 # entries drops those still waiting, so a list of hundreds does not spend the key's rate limit at once.
 class ArtQueue:
-    def __init__(self, vault: "Vault") -> None:
+    def __init__(self, vault: "Vault", art_dir: Path | None = None, port_cards: bool = True) -> None:
         self.vault = vault
+        self.art_dir = art_dir if art_dir is not None else vault.ports_art_dir
+        self.port_cards = port_cards
         self.version = vault.art_version
         self.lock = threading.Lock()
         # Art files by entry id, filled by the art threads.
         self.files: dict[str, tuple[Path | None, Path | None]] = {}
         self.asked: set[str] = set()
-        self.waiting: list[Port] = []
+        self.waiting: list[ArtSubject] = []
         self.workers = 0
 
     def needs_key(self) -> bool:
         return not self.vault.has_art_key()
 
     # No art to wait for: there is no key, or the entry was looked up and has none.
-    def settled(self, port: Port) -> bool:
-        return self.needs_key() or port.id in self.files
+    def settled(self, item: ArtSubject) -> bool:
+        return self.needs_key() or item.id in self.files
 
     # A new or removed key brings other art, so everything found so far is dropped.
     def check_key(self) -> None:
@@ -40,14 +44,14 @@ class ArtQueue:
                 self.asked = set()
                 self.waiting = []
 
-    def want(self, ports: list[Port]) -> None:
+    def want(self, items: Sequence[ArtSubject]) -> None:
         self.check_key()
 
         if self.needs_key():
             return
 
         with self.lock:
-            self.waiting = [port for port in ports if port.id not in self.asked and port.id not in self.files]
+            self.waiting = [item for item in items if item.id not in self.asked and item.id not in self.files]
             start = min(ART_WORKERS, len(self.waiting)) - self.workers
             self.workers += max(0, start)
             version = self.version
@@ -64,28 +68,28 @@ class ArtQueue:
 
                     return
 
-                port = self.waiting.pop(0)
-                self.asked.add(port.id)
+                item = self.waiting.pop(0)
+                self.asked.add(item.id)
 
-            self.fetch(port=port, version=version)
+            self.fetch(item=item, version=version)
 
-    def fetch(self, port: Port, version: int) -> None:
-        urls = self.vault.steamgrid_art(item=port)
+    def fetch(self, item: ArtSubject, version: int) -> None:
+        urls = self.vault.steamgrid_art(item=item)
 
         if urls is None:
             # Not answered (a pause or no network), so wanting the entry again asks again.
             with self.lock:
-                self.asked.discard(port.id)
+                self.asked.discard(item.id)
 
             return
 
-        art_dir = self.vault.ports_art_dir
-        cover = self.vault.fetch_art(item=port, kind="cover", url=urls[0], art_dir=art_dir)
-        background = self.vault.fetch_art(item=port, kind="background", url=urls[1], art_dir=art_dir)
+        art_dir = self.art_dir
+        cover = self.vault.fetch_art(item=item, kind="cover", url=urls[0], art_dir=art_dir)
+        background = self.vault.fetch_art(item=item, kind="background", url=urls[1], art_dir=art_dir)
 
         # SteamGridDB knew nothing of it, so a GitHub repository gets the card GitHub draws for it.
-        if not urls[0] and not urls[1]:
-            background = self.vault.fetch_art(item=port, kind="background", url=card_url(port=port), art_dir=art_dir)
+        if not urls[0] and not urls[1] and self.port_cards and isinstance(item, Port):
+            background = self.vault.fetch_art(item=item, kind="background", url=card_url(port=item), art_dir=art_dir)
 
         if version == self.version:
-            self.files[port.id] = (cover, background)
+            self.files[item.id] = (cover, background)

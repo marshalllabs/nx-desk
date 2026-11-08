@@ -12,6 +12,7 @@ from pydantic import TypeAdapter, ValidationError
 from pydantic_core import to_jsonable_python
 
 from .. import uploader
+from ..catalog.homebrews import parse_homebrews
 from ..catalog.parse import parse_catalog
 from ..catalog.ports import parse_ports
 from ..catalog.title_ids import game_names, parse_title_ids
@@ -22,6 +23,8 @@ from ..config import (
     CATALOG_FILE,
     CATALOGS_DIR,
     DOWNLOAD_DIR,
+    HOMEBREWS_ART_FOLDER,
+    HOMEBREWS_FILE,
     LOGS_DIR,
     NO_CATALOG,
     PORTS_ART_FOLDER,
@@ -38,6 +41,7 @@ from ..schemas.catalog import Catalog, Mod
 from ..schemas.common import LogEntry
 from ..schemas.download import Batch, DownloadTask, Job, RepackTask
 from ..schemas.github import AutoUpload, UploadJob
+from ..schemas.homebrew import Homebrew
 from ..schemas.notice import Notice
 from ..schemas.port import Port
 from ..schemas.registry import REGISTRY, Registry
@@ -108,6 +112,12 @@ class VaultBase:
         self.port_version = 0
         self.port_loading = False
         self.port_error = ""
+        self.homebrew_version = 0
+        self.homebrew_loading = False
+        self.homebrew_error = ""
+        self.homebrew_rows: list[Homebrew] = parse_homebrews(
+            data=self._load_json(path=self.cache_dir / HOMEBREWS_FILE, default={}),
+        )
         # None until gh has answered once.
         self.gh_ready: bool | None = None
         registry = self._load_model(path=self.registry_path, schema=REGISTRY, default=Registry())
@@ -117,6 +127,7 @@ class VaultBase:
         self.titles: dict[str, str] = game_names(rows=self.title_rows)
         self.port_rows: list[Port] = parse_ports(data=self._load_json(path=self.cache_dir / PORTS_FILE, default={}))
         self.ports_art_dir = self.base / "covers" / PORTS_ART_FOLDER
+        self.homebrews_art_dir = self.base / "covers" / HOMEBREWS_ART_FOLDER
         self.mod_name = safe_name(name=registry.mod_name)
         self.download_dir = registry.download_dir
         self.upload_source = registry.upload_source
@@ -130,6 +141,7 @@ class VaultBase:
         self.size_units = registry.size_units or BINARY
         self.notify = registry.notify
         self.ports_view = "grid" if registry.ports_view == "grid" else "list"
+        self.homebrews_view = "grid" if registry.homebrews_view == "grid" else "list"
         self.catalog_view = "grid" if registry.catalog_view == "grid" else "list"
         self.font_family = registry.font_family
         self.font_size = registry.font_size
@@ -267,6 +279,7 @@ class VaultBase:
             size_units=self.size_units,
             notify=self.notify,
             ports_view=self.ports_view,
+            homebrews_view=self.homebrews_view,
             catalog_view=self.catalog_view,
             font_family=self.font_family,
             font_size=self.font_size,

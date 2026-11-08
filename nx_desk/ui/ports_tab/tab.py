@@ -25,6 +25,7 @@ from ...system import open_in_system
 from ...utils.text import plural
 from ..cards.grid import CardGrid
 from ..cards.thumbs import CoverThumbs
+from ..list_art import ListArt
 from ..rows import SortState, picked_text
 from ..style import set_role
 from ..theme import SPACE
@@ -33,7 +34,6 @@ from ..widgets.choice_popup import ChoicePopup
 from ..widgets.overlay import Overlay
 from ..widgets.resize_watch import ResizeWatch
 from ..widgets.spinner import Spinner
-from .art import PortArt
 from .detail import PortDetail
 from .model import COLUMNS, HIDE_BELOW, ROW_HEIGHT, PortModel, cell
 
@@ -66,7 +66,7 @@ class PortsTab(QWidget):
         self.sort_actions: dict[str, QAction] = {}
         self.sort_direction_actions: dict[bool, QAction] = {}
         self.view_actions: dict[str, QAction] = {}
-        self.art = PortArt(vault=self.vault)
+        self.art = ListArt(vault=self.vault, art_dir=self.vault.ports_art_dir, port_cards=True)
         self.art_timer = QTimer(self)
         self.art_timer.setSingleShot(True)
         self.art_timer.setInterval(ART_DELAY)
@@ -438,7 +438,7 @@ class PortsTab(QWidget):
         chosen = [self.selected] if self.selected else []
         ordered = chosen + self.visible_ports() + self.model.rows + self.ports
         # A dict keeps each entry at its first place, so the order above survives the duplicates.
-        self.art.want(ports=list({port.id: port for port in ordered}.values()))
+        self.art.want(items=list({port.id: port for port in ordered}.values()))
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
@@ -476,10 +476,10 @@ class PortsTab(QWidget):
         if self.selected is None:
             return None
 
-        banner = self.art.banner(port=self.selected)
+        banner = self.art.banner(item=self.selected)
 
-        if banner is None and self.art.settled(port=self.selected):
-            return self.art.placeholder(port=self.selected)
+        if banner is None and self.art.settled(item=self.selected):
+            return self.art.placeholder(icon_name="cpu" if self.selected.kind == "emulator" else "gamepad")
 
         return banner
 

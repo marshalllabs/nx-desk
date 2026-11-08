@@ -101,6 +101,11 @@ class Options(Jobs):
             self.catalog_view = "grid" if view == "grid" else "list"
             self._save_registry()
 
+    def set_homebrews_view(self, view: str) -> None:
+        with self.lock:
+            self.homebrews_view = "grid" if view == "grid" else "list"
+            self._save_registry()
+
     def set_size_units(self, units: str) -> None:
         with self.lock:
             set_size_units(units=units)

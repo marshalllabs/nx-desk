@@ -32,8 +32,11 @@ TITLE_IDS_FILE = "title_ids.json"
 TITLE_IDS_MAX_AGE = 24 * 3600
 PORTS_FILE = "ports.json"
 PORTS_MAX_AGE = 6 * 3600
+HOMEBREWS_FILE = "homebrews.json"
+HOMEBREWS_MAX_AGE = 6 * 3600
 # Art of the Switch Ports tab lives in covers/<this>, beside the catalogs' folders.
 PORTS_ART_FOLDER = "_ports"
+HOMEBREWS_ART_FOLDER = "_homebrews"
 PROGRAM_NAME = "NXDesk"
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
 ART_KINDS: tuple[ArtKind, ...] = ("cover", "background")
@@ -55,9 +58,10 @@ JUNK_NAMES = {".ds_store", "thumbs.db", "desktop.ini"}
 TITLE_IDS_KEY = "NX_DESK_TITLE_IDS_URL"
 USER_AGENT_KEY = "NX_DESK_USER_AGENT"
 PORTS_KEY = "NX_DESK_PORTS_URL"
+HOMEBREWS_KEY = "NX_DESK_HOMEBREWS_URL"
 CONFIG_KEYS = ("NX_DESK_RELEASES_URL", TITLE_IDS_KEY)
 # Embedded in a build when set, but a build without them still works.
-OPTIONAL_KEYS = (PORTS_KEY,)
+OPTIONAL_KEYS = (PORTS_KEY, HOMEBREWS_KEY)
 VERSION_KEY = "NX_DESK_VERSION"
 ROMAN_NUMERAL = re.compile(pattern=r"(?=[IVX])X{0,3}(?:IX|IV|V?I{0,3})")
 SAFE_ID = re.compile(pattern=r"^[A-Za-z0-9_-]{1,64}$")

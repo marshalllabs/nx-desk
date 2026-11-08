@@ -60,7 +60,7 @@ class PortArtTests(unittest.TestCase):
 
     def test_a_few_entries_are_asked_at_a_time_in_order(self) -> None:
         art, fake = self.make()
-        art.want(ports=ports(count=10))
+        art.want(items=ports(count=10))
         self.assertTrue(wait_for(lambda: len(fake.started) == ART_WORKERS))
         self.assertEqual(sorted(fake.started), [f"o/game{number}" for number in range(ART_WORKERS)])
         fake.release.set()
@@ -70,9 +70,9 @@ class PortArtTests(unittest.TestCase):
 
     def test_a_new_list_drops_the_entries_still_waiting(self) -> None:
         art, fake = self.make()
-        art.want(ports=ports(count=10))
+        art.want(items=ports(count=10))
         self.assertTrue(wait_for(lambda: len(fake.started) == ART_WORKERS))
-        art.want(ports=ports(count=10)[8:])
+        art.want(items=ports(count=10)[8:])
         fake.release.set()
         self.assertTrue(wait_for(lambda: art.workers == 0))
         self.assertEqual(
@@ -83,24 +83,24 @@ class PortArtTests(unittest.TestCase):
     def test_an_entry_is_not_asked_twice(self) -> None:
         art, fake = self.make()
         fake.release.set()
-        art.want(ports=ports(count=3))
+        art.want(items=ports(count=3))
         self.assertTrue(wait_for(lambda: art.workers == 0))
-        art.want(ports=ports(count=3))
+        art.want(items=ports(count=3))
         self.assertTrue(wait_for(lambda: art.workers == 0))
         self.assertEqual(len(fake.started), 3)
 
     def test_without_a_key_nothing_is_asked(self) -> None:
         art, fake = self.make(key=False)
-        art.want(ports=ports(count=3))
+        art.want(items=ports(count=3))
         self.assertEqual((fake.started, art.workers), ([], 0))
         self.assertTrue(art.needs_key())
 
     def test_an_unanswered_entry_is_asked_again_later(self) -> None:
         art, fake = self.make(answer=None)
         fake.release.set()
-        art.want(ports=ports(count=1))
+        art.want(items=ports(count=1))
         self.assertTrue(wait_for(lambda: art.workers == 0))
-        art.want(ports=ports(count=1))
+        art.want(items=ports(count=1))
         self.assertTrue(wait_for(lambda: art.workers == 0))
         self.assertEqual(len(fake.started), 2)
         self.assertEqual(art.files, {})
@@ -108,7 +108,7 @@ class PortArtTests(unittest.TestCase):
     def test_a_new_key_forgets_what_was_found(self) -> None:
         art, fake = self.make()
         fake.release.set()
-        art.want(ports=ports(count=2))
+        art.want(items=ports(count=2))
         self.assertTrue(wait_for(lambda: art.workers == 0))
         fake.art_version = 1
         art.check_key()
@@ -118,7 +118,7 @@ class PortArtTests(unittest.TestCase):
         art, fake = self.make(answer=("", ""))
         fake.release.set()
         port = Port(id="o/game", name="Game", platform="PC", url="https://github.com/O/Game")
-        art.want(ports=[port])
+        art.want(items=[port])
         self.assertTrue(wait_for(lambda: art.workers == 0))
         self.assertIn(("background", "https://opengraph.githubassets.com/1/O/Game"), fake.fetched)
         self.assertIsNotNone(art.files[port.id][1])
@@ -126,24 +126,24 @@ class PortArtTests(unittest.TestCase):
     def test_an_entry_with_art_gets_no_card_and_another_host_none_at_all(self) -> None:
         art, fake = self.make(answer=("https://cdn2.steamgriddb.com/grid/c.png", ""))
         fake.release.set()
-        art.want(ports=[Port(id="o/game", name="Game", platform="PC", url="https://github.com/o/game")])
+        art.want(items=[Port(id="o/game", name="Game", platform="PC", url="https://github.com/o/game")])
         self.assertTrue(wait_for(lambda: art.workers == 0))
         self.assertEqual([url for _, url in fake.fetched if "githubassets" in url], [])
         other, fake = self.make(answer=("", ""))
         fake.release.set()
-        other.want(ports=[Port(id="g/game", name="Game", platform="PC", url="https://gitlab.com/g/game")])
+        other.want(items=[Port(id="g/game", name="Game", platform="PC", url="https://gitlab.com/g/game")])
         self.assertTrue(wait_for(lambda: other.workers == 0))
         self.assertEqual(other.files["g/game"], (None, None))
 
     def test_an_entry_with_no_art_is_settled_and_one_still_waiting_is_not(self) -> None:
         art, fake = self.make(answer=("", ""))
         port = ports(count=1)[0]
-        self.assertFalse(art.settled(port=port))
-        art.want(ports=[port])
+        self.assertFalse(art.settled(item=port))
+        art.want(items=[port])
         self.assertTrue(wait_for(lambda: len(fake.started) == 1))
-        self.assertFalse(art.settled(port=port))
+        self.assertFalse(art.settled(item=port))
         fake.release.set()
         self.assertTrue(wait_for(lambda: art.workers == 0))
-        self.assertTrue(art.settled(port=port))
+        self.assertTrue(art.settled(item=port))
         keyless, _ = self.make(key=False)
-        self.assertTrue(keyless.settled(port=port))
+        self.assertTrue(keyless.settled(item=port))

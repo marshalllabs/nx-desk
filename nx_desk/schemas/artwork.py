@@ -3,7 +3,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, TypeAdapter
 
 
-# What art needs to know about a game: the catalog's mods and the ports list both fit.
+# What artwork needs from catalog mods, ports and homebrews.
 class ArtSubject(Protocol):
     @property
     def id(self) -> str: ...

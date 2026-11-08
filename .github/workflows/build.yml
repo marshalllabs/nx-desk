@@ -82,6 +82,7 @@ jobs:
           NX_DESK_RELEASES_URL: ${{ secrets.NX_DESK_RELEASES_URL }}
           NX_DESK_TITLE_IDS_URL: ${{ secrets.NX_DESK_TITLE_IDS_URL }}
           NX_DESK_PORTS_URL: ${{ secrets.NX_DESK_PORTS_URL }}
+          NX_DESK_HOMEBREWS_URL: ${{ secrets.NX_DESK_HOMEBREWS_URL }}
           NX_DESK_VERSION: ${{ needs.release.outputs.tag }}
       - uses: actions/upload-artifact@v7
         with:

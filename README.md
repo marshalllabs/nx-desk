@@ -11,7 +11,7 @@ A desktop app that downloads, tracks and repackages game mods, and keeps them on
 - Resumable downloads with mirrors, SHA-256 checks and update detection.
 - Every mod repacked into one layout, at the compression level you choose.
 - Upload to and download from GitHub releases through `gh`.
-- Switch Ports and Title IDs lists.
+- Ports, Homebrews and Title IDs lists.
 - Updates itself from public GitHub releases; the release repository must be public for update checks and downloads.
 
 ## Install
@@ -61,6 +61,11 @@ A desktop app that downloads, tracks and repackages game mods, and keeps them on
 ## Other tabs
 
 - **Switch Ports**: ports and emulators, as a list or a grid, from `NX_DESK_PORTS_URL`.
+- **Homebrews**: searchable List/Grid view with group and type filters, metadata, sorting and
+  detail-page links, from `NX_DESK_HOMEBREWS_URL`. Refresh clears search and filters; a failed fetch
+  keeps the last cached list. This tab opens source pages for download and installation details.
+  - Uses the shared artwork key for grid covers and detail banners. Images are requested for the
+    selected and visible entries; unmatched entries keep their default icon.
 - **Title IDs**: looks up a title ID or name among games, system titles and sysmodules, from `NX_DESK_TITLE_IDS_URL`.
 - **Game art** comes from SteamGridDB when you set its API key in **Settings**; the key is kept in the system keyring.
 
@@ -79,6 +84,7 @@ A desktop app that downloads, tracks and repackages game mods, and keeps them on
 | `NX_DESK_RELEASES_URL`  | GitHub API URL of the latest release, for update checks |
 | `NX_DESK_TITLE_IDS_URL` | Link to the `title_ids.json` list                       |
 | `NX_DESK_PORTS_URL`     | Optional link to the `switch-ports.json` list           |
+| `NX_DESK_HOMEBREWS_URL` | Optional link to the `homebrews.json` list from NX Index |
 | `NX_DESK_USER_AGENT`    | Optional User-Agent; blank uses `Mozilla/5.0`           |
 
 ## Development

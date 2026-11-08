@@ -108,6 +108,10 @@
 - Check GitHub self-updates through the public Releases API and download assets over HTTPS; this does not require `gh`.
 - Keep `gh` authentication for private release operations in the GitHub tab and uploader.
 - Build naming and update selection share `asset_name()`; renaming assets can strand installed builds.
+- Homebrews reads the normalized NX Index feed through optional `NX_DESK_HOMEBREWS_URL`; keep
+  source HTML parsing in NX Index. Preserve cached rows on errors and independent List/Grid settings.
+- Ports and Homebrews share `ui/list_art.py` and `vault/art_queue.py`. Homebrews images live in
+  `covers/_homebrews/`; request only selected/visible entries and keep lookup/key handling shared.
 - Build-matrix changes must also update the publish job's `EXPECTED` asset count.
 - If editing `assets/icon.svg`, regenerate `icon.ico`, `icon.icns` and `nx_desk/ui/icon.png`.
 - Use Conventional Commits: `fix:` and `feat:` trigger releases; `docs:`, `chore:`, `refactor:` and `test:` do not.
