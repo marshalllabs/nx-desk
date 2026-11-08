@@ -38,8 +38,8 @@ class CatalogTabState(QWidget):
     ART_SIZE = ART_SIZE
     DETAIL_WIDTH = 440
 
-    app: App
-    vault: Vault
+    app: "App"
+    vault: "Vault"
     items: dict[str, ModRow]
     shown_ids: list[str] | None
     selected: str | None

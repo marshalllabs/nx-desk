@@ -25,8 +25,8 @@ if TYPE_CHECKING:
 
 # The attributes UploadTab builds, for the mixins that share them.
 class UploadTabState(QWidget):
-    app: App
-    vault: Vault
+    app: "App"
+    vault: "Vault"
     painted: tuple[object, ...] | None
     shown_tree: int | None
     shown_releases: int | None
