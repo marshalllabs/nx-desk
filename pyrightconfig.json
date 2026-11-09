@@ -1,7 +1,7 @@
 // Pylance in VS Code reads this too, so the editor shows the same errors as make lint.
 {
   "include": ["main.py", "nx_desk", "scripts", "tests"],
-  "pythonVersion": "3.10",
+  "pythonVersion": "3.12",
   "venvPath": ".",
   "venv": ".venv",
   "typeCheckingMode": "standard"

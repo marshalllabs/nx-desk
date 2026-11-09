@@ -1,23 +1,21 @@
 import re
-from typing import Any
+from typing import Dict, List, Optional
+
+from pydantic import JsonValue
 
 from ..config import GDRIVE_URL, SAFE_GDRIVE
+from ..utils.urls import https_or_empty
 from .fields import FIELD_ALIASES
 
 
-def https_or_empty(value: object) -> str:
-    if isinstance(value, str) and value.startswith("https://"):
-        return value
-
-    return ""
-
-
-def dig(obj: object, path: str) -> Any:
-    for part in str(path).split("."):
+def dig(obj: JsonValue, path: str) -> JsonValue:
+    for part in str(path).split(sep="."):
         if isinstance(obj, dict):
             obj = obj.get(part)
+
         elif isinstance(obj, list) and part.lstrip("-").isdigit() and -len(obj) <= int(part) < len(obj):
             obj = obj[int(part)]
+
         else:
             return None
 
@@ -27,7 +25,7 @@ def dig(obj: object, path: str) -> Any:
     return obj
 
 
-def pick(raw: object, field: str, mapping: dict[str, str] | None) -> Any:
+def pick(raw: JsonValue, field: str, mapping: Optional[Dict[str, str]]) -> JsonValue:
     if mapping and mapping.get(field):
         return dig(obj=raw, path=mapping[field])
 
@@ -44,7 +42,7 @@ def as_text(value: object) -> str:
     return str(value) if isinstance(value, (str, int, float)) and not isinstance(value, bool) else ""
 
 
-def as_list(value: object) -> list[Any]:
+def as_list(value: JsonValue) -> List[JsonValue]:
     return value if isinstance(value, list) else []
 
 
@@ -67,14 +65,18 @@ def as_size(value: object) -> int:
     return 0
 
 
-def clean_mapping(mapping: object) -> dict[str, str]:
+def clean_mapping(mapping: object) -> Dict[str, str]:
     if not isinstance(mapping, dict):
         return {}
 
-    return {field: key.strip() for field, key in mapping.items() if isinstance(key, str) and key.strip()}
+    return {
+        field: key.strip()
+        for field, key in mapping.items()
+        if isinstance(field, str) and isinstance(key, str) and key.strip()
+    }
 
 
-def resolve_urls(primary: object, mirrors: object) -> list[str]:
+def resolve_urls(primary: JsonValue, mirrors: JsonValue) -> List[str]:
     urls = [https_or_empty(value=primary)]
 
     for mirror in as_list(value=mirrors):
@@ -83,6 +85,7 @@ def resolve_urls(primary: object, mirrors: object) -> list[str]:
 
             if SAFE_GDRIVE.match(string=file_id):
                 urls.append(GDRIVE_URL + file_id)
+
         else:
             urls.append(https_or_empty(value=mirror))
 

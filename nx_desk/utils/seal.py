@@ -7,7 +7,7 @@ TAG = 16
 
 
 def _stream(key: bytes, nonce: bytes, size: int) -> bytes:
-    return hashlib.shake_256(b"seal" + key + nonce).digest(size)
+    return hashlib.shake_256(string=b"seal" + key + nonce).digest(size)
 
 
 def _mix(key: bytes, nonce: bytes, data: bytes) -> bytes:
@@ -15,13 +15,13 @@ def _mix(key: bytes, nonce: bytes, data: bytes) -> bytes:
 
 
 def _tag(key: bytes, body: bytes) -> bytes:
-    return hmac.new(key, b"tag" + body, hashlib.sha256).digest()[:TAG]
+    return hmac.new(key=key, msg=b"tag" + body, digestmod=hashlib.sha256).digest()[:TAG]
 
 
 # Two-way: the text comes back with the same key. It hides the text from a reader of the file, but
 # not from one who can also read the key.
 def seal(key: bytes, text: str) -> str:
-    nonce = secrets.token_bytes(NONCE)
+    nonce = secrets.token_bytes(nbytes=NONCE)
     data = text.encode(encoding="utf-8")
     body = nonce + _mix(key=key, nonce=nonce, data=data)
 
@@ -31,6 +31,7 @@ def seal(key: bytes, text: str) -> str:
 def unseal(key: bytes, sealed: str) -> str:
     try:
         raw = bytes.fromhex(sealed)
+
     except ValueError:
         raise ValueError("the sealed text is not hex") from None
 

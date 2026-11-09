@@ -3,7 +3,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Dict, Set, Tuple
 
 from nx_desk import uploader
 from nx_desk.catalog.parse import normalize
@@ -19,7 +19,7 @@ sys.dont_write_bytecode = True
 TITLE = "0100BA4026E94000"
 
 
-def entry(**overrides: object) -> dict[str, object]:
+def entry(**overrides: object) -> Dict[str, object]:
     fields = {
         "id": "game",
         "sha256": "0" * 64,
@@ -45,32 +45,32 @@ def mod(**overrides: object) -> Mod:
 
 # Tests set only the fields they check; the rest keep these defaults.
 def row(**overrides: object) -> ModRow:
-    fields = {**dict(mod()), "status": "missing", "remote": False, "local_version": "", "local_game_version": ""}
+    fields = {**mod().model_dump(), "status": "missing", "remote": False, "local_version": "", "local_game_version": ""}
 
-    return ModRow.model_validate({**fields, "job": None, **overrides})
+    return ModRow.model_validate(obj={**fields, "job": None, **overrides})
 
 
 def asset(name: str, **overrides: object) -> Asset:
     fields = {"id": 1, "name": name, "size": 0, "digest": None, "label": None, "updated_at": ""}
 
-    return Asset.model_validate({**fields, **overrides})
+    return Asset.model_validate(obj={**fields, **overrides})
 
 
 def job(**overrides: object) -> Job:
     fields = {"phase": "queued", "done": 0, "total": 0, "speed": 0, "game": "Game", "weight": 0}
 
-    return Job.model_validate({**fields, **overrides})
+    return Job.model_validate(obj={**fields, **overrides})
 
 
 class FakeGitHub:
     def __init__(self) -> None:
         # Release files as the GitHub API would return them.
-        self.assets: dict[str, dict[str, Any]] = {}
-        self.blobs: dict[str, bytes] = {}
+        self.assets: Dict[str, Asset] = {}
+        self.blobs: Dict[str, bytes] = {}
 
         self.releases = ["reviewed"]
         # Git tags of the repository: a release takes one, and renaming a release leaves the old one behind.
-        self.tags: set[str] = {"reviewed"}
+        self.tags: Set[str] = {"reviewed"}
         self.keep_tags = False
         self.repos = ["me/zeta", "Me/alpha"]
         self.latest = "reviewed"
@@ -91,8 +91,8 @@ class FakeGitHub:
             rows = [
                 {
                     "full_name": name,
-                    "name": name.split("/")[1],
-                    "owner": {"login": name.split("/")[0]},
+                    "name": name.split(sep="/")[1],
+                    "owner": {"login": name.split(sep="/")[0]},
                     "visibility": "public",
                 }
                 for name in self.repos
@@ -136,9 +136,9 @@ class FakeGitHub:
 
         if args[:2] == ("release", "upload"):
             path = Path(args[3])
-            self.add(name=path.name, digest=f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}")
-            self.assets[path.name]["size"] = path.stat().st_size
-            self.assets[path.name]["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 1))
+            self.add(name=path.name, digest=f"sha256:{hashlib.sha256(string=path.read_bytes()).hexdigest()}")
+            self.assets[path.name].size = path.stat().st_size
+            self.assets[path.name].updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 1))
             self.blobs[path.name] = path.read_bytes()
 
             return ""
@@ -163,7 +163,7 @@ class FakeGitHub:
         if "/releases/tags/" in url:
             return json.dumps(obj={"id": 1})
 
-        return json.dumps(obj=[list(self.assets.values())])
+        return json.dumps(obj=[[asset.model_dump(mode="json") for asset in self.assets.values()]])
 
     def post(self, repo: str, release: int, path: Path, token: str, moved: Progress) -> None:
         assert token == "token"
@@ -171,7 +171,7 @@ class FakeGitHub:
         self("release", "upload", "tag", str(path))
 
     def add(self, name: str, digest: str) -> None:
-        self.assets[name] = {"id": self.next_id, "name": name, "digest": digest}
+        self.assets[name] = Asset(id=self.next_id, name=name, digest=digest)
         self.next_id += 1
 
     def delete_tag(self, tag: str) -> str:
@@ -185,16 +185,18 @@ class FakeGitHub:
 
         return ""
 
-    def change(self, args: tuple[str, ...]) -> str:
+    def change(self, args: Tuple[str, ...]) -> str:
         number = int(args[3].rsplit("/", 1)[1])
-        asset = next(item for item in self.assets.values() if item["id"] == number)
-        del self.assets[asset["name"]]
+        asset = next(item for item in self.assets.values() if item.id == number)
+        del self.assets[asset.name]
 
         if args[2] == "PATCH":
-            old = asset["name"]
-            fields = dict(args[index + 1].split("=", 1) for index, arg in enumerate(args) if arg == "-f")
-            asset.update(fields)
-            self.assets[asset["name"]] = asset
-            self.blobs[asset["name"]] = self.blobs.pop(old, b"")
+            old = asset.name
+            fields = dict(
+                args[index + 1].split(sep="=", maxsplit=1) for index, arg in enumerate(iterable=args) if arg == "-f"
+            )
+            asset = asset.model_copy(update=fields)
+            self.assets[asset.name] = asset
+            self.blobs[asset.name] = self.blobs.pop(old, b"")
 
         return ""

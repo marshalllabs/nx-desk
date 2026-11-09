@@ -3,20 +3,20 @@ import shutil
 import threading
 import zipfile
 from pathlib import Path
-from typing import IO
+from typing import IO, Dict, List, Optional, Set, Tuple
 
 from .config import CHUNK, DEFAULT_COMPRESSION, JUNK_NAMES, MAX_UNPACKED, TITLE_ID
 
 # What a zip member stores as its modification time.
-DateTime = tuple[int, int, int, int, int, int]
+DateTime = Tuple[int, int, int, int, int, int]
 
 
-def plan_repack(infos: list[zipfile.ZipInfo], title_id: str) -> dict[str, zipfile.ZipInfo]:
+def plan_repack(infos: List[zipfile.ZipInfo], title_id: str) -> Dict[str, zipfile.ZipInfo]:
     # Every title stays: a pack's extra titles, such as a system font, belong to the game.
     if not TITLE_ID.match(string=title_id):
         raise RuntimeError(f"invalid title id: {title_id!r}")
 
-    plan: dict[str, zipfile.ZipInfo] = {}
+    plan: Dict[str, zipfile.ZipInfo] = {}
     total = 0
     found = False
 
@@ -26,7 +26,7 @@ def plan_repack(infos: list[zipfile.ZipInfo], title_id: str) -> dict[str, zipfil
         if name.endswith("/"):
             continue
 
-        parts = [part for part in name.split("/") if part]
+        parts = [part for part in name.split(sep="/") if part]
 
         if ".." in parts or "." in parts or name.startswith("/"):
             raise RuntimeError(f"unsafe path in zip: {name}")
@@ -34,7 +34,7 @@ def plan_repack(infos: list[zipfile.ZipInfo], title_id: str) -> dict[str, zipfil
         if parts[0] == "__MACOSX" or parts[-1].lower() in JUNK_NAMES:
             continue
 
-        index = next((i for i, part in enumerate(parts) if TITLE_ID.match(string=part)), None)
+        index = next((i for i, part in enumerate(iterable=parts) if TITLE_ID.match(string=part)), None)
 
         if index is None:
             continue
@@ -72,7 +72,7 @@ def member_info(
     date_time: DateTime,
     mode: int,
     compress_type: int,
-    level: int | None = DEFAULT_COMPRESSION,
+    level: Optional[int] = DEFAULT_COMPRESSION,
 ) -> zipfile.ZipInfo:
     info = zipfile.ZipInfo(filename=name, date_time=date_time)
     info.create_system = 3
@@ -91,9 +91,9 @@ def add_member(
     date_time: DateTime,
     size: int,
     reader: IO[bytes],
-    written: set[str],
+    written: Set[str],
 ) -> None:
-    folders = arcname.split("/")[:-1]
+    folders = arcname.split(sep="/")[:-1]
 
     for depth in range(1, len(folders) + 1):
         folder = "/".join(folders[:depth]) + "/"
@@ -127,7 +127,7 @@ def repack(
     source: Path,
     target: Path,
     title_id: str,
-    cancel: threading.Event | None = None,
+    cancel: Optional[threading.Event] = None,
     level: int = DEFAULT_COMPRESSION,
 ) -> None:
     # Members are streamed, never extracted to disk.
@@ -141,7 +141,7 @@ def repack(
             zipfile.ZipFile(file=temp, mode="w", compression=method, compresslevel=level) as output,
         ):
             plan = plan_repack(infos=original.infolist(), title_id=title_id)
-            written: set[str] = set()
+            written: Set[str] = set()
 
             for arcname, member in plan.items():
                 if cancel is not None and cancel.is_set():
@@ -166,6 +166,7 @@ def repack(
                 raise RuntimeError("repacked zip does not match the original")
 
         os.replace(src=temp, dst=target)
+
     finally:
         temp.unlink(missing_ok=True)
 

@@ -1,9 +1,10 @@
 import time
-from collections.abc import Callable
+from typing import Callable
 
 from .. import uploader
-from ..names import format_size
+from ..schemas.download import TransferMark
 from ..schemas.github import Transfer, UploadSnapshot
+from ..utils.sizes import format_size
 from .logs import Logs
 
 
@@ -38,12 +39,14 @@ class GitHubJob(Logs):
             shown = self.upload_job.transfer
             same = shown is not None and shown.label == label
 
-            if mark is None or done < mark[1] or not same:
-                self.meter_mark = (now, done)
+            if mark is None or done < mark.done or not same:
+                self.meter_mark = TransferMark(time=now, done=done)
                 speed = shown.speed if shown is not None and same else 0
-            elif now - mark[0] >= 0.5:
-                speed = (done - mark[1]) / (now - mark[0])
-                self.meter_mark = (now, done)
+
+            elif now - mark.time >= 0.5:
+                speed = (done - mark.done) / (now - mark.time)
+                self.meter_mark = TransferMark(time=now, done=done)
+
             else:
                 return
 
@@ -62,6 +65,7 @@ class GitHubJob(Logs):
 
             if text:
                 items[key] = text
+
             else:
                 items.pop(key, None)
 
@@ -89,6 +93,7 @@ class GitHubJob(Logs):
     def _login(self) -> None:
         try:
             uploader.command.ensure_login()
+
         except uploader.command.GhError:
             self.gh_ready = False
             raise
@@ -116,6 +121,7 @@ class GitHubJob(Logs):
 
             if message:
                 self._log_github(text=message)
+
         except (uploader.command.GhError, ValueError, OSError) as error:
             with self.lock:
                 alerts = self.upload_job.alerts + (0 if quiet else 1)

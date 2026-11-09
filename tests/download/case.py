@@ -2,6 +2,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from typing import Dict, Tuple
 from unittest import mock
 
 from nx_desk import names, net, vault
@@ -20,11 +21,11 @@ class DownloadCase(unittest.TestCase):
         self.src.mkdir()
         self.store = vault.Vault(base=self.base / "data")
         self.store.set_mod_name(name="VI")
-        offline = mock.patch.object(net, "http_get", side_effect=OSError("offline"))
+        offline = mock.patch.object(target=net, attribute="http_get", side_effect=OSError("offline"))
         offline.start()
         self.addCleanup(offline.stop)
 
-    def zip_file(self, relative: str, members: dict[str, bytes]) -> Path:
+    def zip_file(self, relative: str, members: Dict[str, bytes]) -> Path:
         path = self.src / relative
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -60,22 +61,26 @@ class DownloadCase(unittest.TestCase):
 
             return step()
 
-        with mock.patch.object(self.store.queue, "get", side_effect=next_entry), self.assertRaises(SystemExit):
+        with (
+            mock.patch.object(target=self.store.queue, attribute="get", side_effect=next_entry),
+            self.assertRaises(expected_exception=SystemExit),
+        ):
             self.store.worker()
 
         if not self.store.repack_queue.empty():
             self.store._repack_next()
 
-        return "\n".join(f"{game}: {text}" for _, _, game, text in self.store.snapshot().log)
+        return "\n".join(f"{line.game}: {line.text}" for line in self.store.snapshot().log)
 
     def run_worker_once(self) -> None:
-        _, _, entry, cancel = self.store.queue.get()
+        task = self.store.queue.get()
+        entry, cancel = task.entry, task.cancel
         self.store._run_download(entry=entry, cancel=cancel)
 
     def log_text(self) -> str:
-        return "\n".join(f"{game}: {text}" for _, _, game, text in self.store.snapshot().log)
+        return "\n".join(f"{line.game}: {line.text}" for line in self.store.snapshot().log)
 
-    def queue_two(self, sizes: tuple[int, int] = (100, 300)) -> None:
+    def queue_two(self, sizes: Tuple[int, int] = (100, 300)) -> None:
         self.store.items = [mod(id=name, name=name, size=size) for name, size in zip("ab", sizes, strict=True)]
         self.store.enqueue(ids=["a", "b"])
 

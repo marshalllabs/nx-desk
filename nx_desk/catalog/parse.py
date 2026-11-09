@@ -1,22 +1,31 @@
-import json
 import time
-from typing import Any
+from typing import Dict, List, Optional, Set
+
+from pydantic import JsonValue
 
 from .. import net
 from ..config import MAX_CATALOG, SAFE_ID, SAFE_SHA
 from ..names import art_slug
-from ..schemas.catalog import CatalogDocument, Highlight, Mod
+from ..schemas.catalog import CatalogDocument, CatalogFetch, Highlight, Mod
+from ..utils.json import json_value, parse_json
+from ..utils.urls import https_or_empty
 from .fields import ROOT_ALIASES
-from .values import as_list, as_size, as_text, dig, https_or_empty, pick, resolve_urls
+from .values import as_list, as_size, as_text, dig, pick, resolve_urls
 
 
-def normalize(raw: object, mapping: dict[str, str] | None = None) -> Mod | None:
+def normalize(raw: object, mapping: Optional[Dict[str, str]] = None) -> Optional[Mod]:
     # Catalog data is untrusted. An id and one https URL are required, the rest may be missing.
-    if not isinstance(raw, dict):
+    try:
+        data = json_value(value=raw)
+
+    except ValueError:
         return None
 
-    def get(field: str) -> Any:
-        return pick(raw=raw, field=field, mapping=mapping)
+    if not isinstance(data, dict):
+        return None
+
+    def get(field: str) -> JsonValue:
+        return pick(raw=data, field=field, mapping=mapping)
 
     name = as_text(value=get(field="name")).strip()
     raw_id = get(field="id")
@@ -68,7 +77,9 @@ def normalize(raw: object, mapping: dict[str, str] | None = None) -> Mod | None:
     )
 
 
-def find_rows(data: object, mapping: dict[str, str] | None) -> list[Any] | None:
+def find_rows(data: object, mapping: Optional[Dict[str, str]]) -> Optional[List[JsonValue]]:
+    data = json_value(value=data)
+
     if isinstance(data, list):
         return data
 
@@ -81,13 +92,15 @@ def find_rows(data: object, mapping: dict[str, str] | None) -> list[Any] | None:
         return rows if isinstance(rows, list) else None
 
     for key in ROOT_ALIASES:
-        if isinstance(data.get(key), list):
-            return data[key]
+        rows = data.get(key)
+
+        if isinstance(rows, list):
+            return rows
 
     return None
 
 
-def fetch_catalog(url: str, mapping: dict[str, str] | None = None) -> tuple[bytes, CatalogDocument]:
+def fetch_catalog(url: str, mapping: Optional[Dict[str, str]] = None) -> CatalogFetch:
     separator = "&" if "?" in url else "?"
 
     with net.http_get(url=f"{url}{separator}t={int(time.time())}") as response:
@@ -96,17 +109,17 @@ def fetch_catalog(url: str, mapping: dict[str, str] | None = None) -> tuple[byte
     if len(raw) > MAX_CATALOG:
         raise ValueError("catalog is too large")
 
-    return raw, parse_catalog(data=json.loads(s=raw), mapping=mapping)
+    return CatalogFetch(raw=raw, document=parse_catalog(data=parse_json(text=raw), mapping=mapping))
 
 
-def parse_catalog(data: object, mapping: dict[str, str] | None = None) -> CatalogDocument:
+def parse_catalog(data: object, mapping: Optional[Dict[str, str]] = None) -> CatalogDocument:
     rows = find_rows(data=data, mapping=mapping)
 
     if rows is None:
         raise ValueError("file is not a catalog")
 
-    items: list[Mod] = []
-    seen: set[str] = set()
+    items: List[Mod] = []
+    seen: Set[str] = set()
 
     for raw in rows:
         entry = normalize(raw=raw, mapping=mapping)

@@ -1,18 +1,19 @@
 import http.client
 import shutil
 import time
+from typing import Dict, List, Optional
 from urllib.parse import urlsplit
 
 from ..catalog.parse import fetch_catalog
 from ..catalog.values import clean_mapping
 from ..config import CATALOG_FILE
-from ..schemas.catalog import Catalog, CatalogEdit, Mod
+from ..schemas.catalog import Catalog, CatalogChanges, CatalogEdit, CatalogSource, Mod
 from ..utils.text import few_names, plural
 from .catalog_moves import CatalogMoves
 
 
 # Entries new to a fresh catalog, and ones whose file changed, against the list it replaces.
-def catalog_news(old: list[Mod], new: list[Mod]) -> tuple[list[str], list[str]]:
+def catalog_news(old: List[Mod], new: List[Mod]) -> CatalogChanges:
     before = {item.id: item for item in old}
     added = [item.name for item in new if item.id not in before]
     changed = [
@@ -21,11 +22,11 @@ def catalog_news(old: list[Mod], new: list[Mod]) -> tuple[list[str], list[str]]:
         if item.id in before and (item.sha256, item.version) != (before[item.id].sha256, before[item.id].version)
     ]
 
-    return added, changed
+    return CatalogChanges(added=added, changed=changed)
 
 
 class Catalogs(CatalogMoves):
-    def add_catalog(self, name: str, url: str, mapping: dict[str, str] | None = None) -> Catalog:
+    def add_catalog(self, name: str, url: str, mapping: Optional[Dict[str, str]] = None) -> Catalog:
         url = url.strip()
 
         if not url.startswith("https://"):
@@ -37,7 +38,8 @@ class Catalogs(CatalogMoves):
             if any(catalog.url == url for catalog in self.catalogs):
                 raise ValueError("this catalog is already in the list")
 
-        raw, _ = fetch_catalog(url=url, mapping=mapping)
+        fetched = fetch_catalog(url=url, mapping=mapping)
+        raw = fetched.raw
         name = name.strip() or urlsplit(url=url).hostname or "catalog"
 
         with self.lock:
@@ -66,7 +68,7 @@ class Catalogs(CatalogMoves):
         folder: str,
         name: str,
         url: str,
-        mapping: dict[str, str] | None = None,
+        mapping: Optional[Dict[str, str]] = None,
     ) -> CatalogEdit:
         url = url.strip()
 
@@ -84,9 +86,11 @@ class Catalogs(CatalogMoves):
             if any(other.url == url and other is not catalog for other in self.catalogs):
                 raise ValueError("another catalog already uses this URL")
 
-        raw, document = fetch_catalog(url=url, mapping=mapping)
+        fetched = fetch_catalog(url=url, mapping=mapping)
+        raw = fetched.raw
+        document = fetched.document
         new_name = name.strip() or catalog.name
-        notes: list[str] = []
+        notes: List[str] = []
 
         with self.lock:
             if not any(c is catalog for c in self.catalogs):
@@ -145,8 +149,10 @@ class Catalogs(CatalogMoves):
         for leftover in (self.catalogs_dir / folder, self.base / "covers" / folder):
             shutil.rmtree(path=leftover, ignore_errors=True)
 
-    def _report_news(self, catalog: Catalog, old: list[Mod], new: list[Mod]) -> None:
-        added, changed = catalog_news(old=old, new=new)
+    def _report_news(self, catalog: Catalog, old: List[Mod], new: List[Mod]) -> None:
+        news = catalog_news(old=old, new=new)
+        added = news.added
+        changed = news.changed
         lines = []
 
         if added:
@@ -166,14 +172,16 @@ class Catalogs(CatalogMoves):
             self._clear_failed_jobs()
             self.checking = True
             catalog = self.catalog
-            source = (catalog.url, catalog.mapping)
+            source = CatalogSource(url=catalog.url, mapping=catalog.mapping)
 
         try:
-            raw, document = fetch_catalog(url=source[0], mapping=clean_mapping(mapping=source[1]))
+            fetched = fetch_catalog(url=source.url, mapping=clean_mapping(mapping=source.mapping))
+            raw = fetched.raw
+            document = fetched.document
 
             with self.lock:
                 # The user may have switched or edited catalogs while this one was loading.
-                if self.catalog is catalog and (catalog.url, catalog.mapping) == source:
+                if self.catalog is catalog and (catalog.url == source.url and catalog.mapping == source.mapping):
                     self._write_bytes(path=self.cache_path, data=raw)
                     old = self.items
                     self.items = self._named(items=document.items)
@@ -186,10 +194,12 @@ class Catalogs(CatalogMoves):
                     self.checked_at = time.time()
 
             self.refresh_release_state()
+
         except (OSError, ValueError, http.client.HTTPException) as error:
             with self.lock:
                 if self.catalog is catalog:
                     self.check_error = str(error) or type(error).__name__
+
         finally:
             with self.lock:
                 self.checking = False

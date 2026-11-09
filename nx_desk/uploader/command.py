@@ -3,8 +3,8 @@ import shutil
 import subprocess
 import threading
 import time
-from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Iterator, Optional, Tuple
 
 from ..system import system_env
 from ..zips import Cancelled
@@ -32,12 +32,13 @@ running = threading.local()
 
 
 @contextmanager
-def stoppable(cancel: threading.Event | None) -> Iterator[None]:
+def stoppable(cancel: Optional[threading.Event]) -> Iterator[None]:
     previous = getattr(running, "cancel", None)
     running.cancel = cancel
 
     try:
         yield
+
     finally:
         running.cancel = previous
 
@@ -60,12 +61,15 @@ def gh(*args: str) -> str:
     while True:
         try:
             return run_gh(command=command, args=args)
+
         except GhError as error:
             # A request refused for its rate was not carried out, so sending it again is safe.
             if RATE_LIMITED.search(string=str(error)):
                 wait = next(rate, None)
+
             elif SERVER_ERROR.search(string=str(error)) and repeatable(args=args):
                 wait = next(server, None)
+
             else:
                 wait = None
 
@@ -75,7 +79,7 @@ def gh(*args: str) -> str:
             pause(seconds=wait)
 
 
-def repeatable(args: tuple[str, ...]) -> bool:
+def repeatable(args: Tuple[str, ...]) -> bool:
     if not args or args[0] != "api":
         return False
 
@@ -89,11 +93,12 @@ def pause(seconds: float) -> None:
 
     if cancel is None:
         time.sleep(seconds)
+
     elif cancel.wait(seconds):
         raise Cancelled
 
 
-def run_gh(command: str, args: tuple[str, ...]) -> str:
+def run_gh(command: str, args: Tuple[str, ...]) -> str:
     process = subprocess.Popen(
         args=[command, *args],
         stdout=subprocess.PIPE,
@@ -109,9 +114,11 @@ def run_gh(command: str, args: tuple[str, ...]) -> str:
         try:
             output, errors = process.communicate(timeout=0.2)
             break
+
         except subprocess.TimeoutExpired:
             try:
                 stop_point()
+
             except Cancelled:
                 process.kill()
                 process.communicate()
@@ -126,6 +133,7 @@ def run_gh(command: str, args: tuple[str, ...]) -> str:
 def ensure_login() -> None:
     try:
         gh("auth", "status")
+
     except GhError as error:
         if "not installed" in str(error):
             raise

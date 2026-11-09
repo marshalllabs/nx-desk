@@ -3,8 +3,8 @@ import shutil
 import tempfile
 import time
 import zipfile
-from collections.abc import Collection
 from pathlib import Path
+from typing import Collection, Counter, Dict, List, Optional
 
 from .. import uploader
 from ..names import safe_name
@@ -16,8 +16,8 @@ from .source import UploadSource
 
 
 class AssetDownloads(UploadSource):
-    def _download_groups(self, names: Collection[str] | None, assets: dict[str, Asset]) -> list[list[str]]:
-        groups: dict[str, list[str]] = {}
+    def _download_groups(self, names: Optional[Collection[str]], assets: Dict[str, Asset]) -> List[List[str]]:
+        groups: Dict[str, List[str]] = {}
 
         for name in assets:
             if self._listed(name=name) and (names is None or name in names):
@@ -27,10 +27,10 @@ class AssetDownloads(UploadSource):
 
     def _download_one(
         self,
-        group: list[str],
+        group: List[str],
         repo: str,
         tag: str,
-        assets: dict[str, Asset],
+        assets: Dict[str, Asset],
         root: Path,
         work: Path,
         owner: str,
@@ -55,10 +55,11 @@ class AssetDownloads(UploadSource):
             report(text=f"extracting into {root}")
 
             return uploader.archive.extract_folder(archive=archive, root=root, place=place)
+
         finally:
             shutil.rmtree(path=place, ignore_errors=True)
 
-    def download_assets(self, names: Collection[str] | None = None) -> None:
+    def download_assets(self, names: Optional[Collection[str]] = None) -> None:
         self._wait_for_github()
 
         with self.github_lock:
@@ -74,7 +75,7 @@ class AssetDownloads(UploadSource):
 
         return root / name if (root / name).is_dir() else root / f"[{name}]"
 
-    def _download_assets(self, names: Collection[str] | None) -> None:
+    def _download_assets(self, names: Optional[Collection[str]]) -> None:
         tag = self.upload_tag
         self.upload_cancel.clear()
 
@@ -86,6 +87,7 @@ class AssetDownloads(UploadSource):
                 raise ValueError("Choose a release and a source folder")
 
             assets = uploader.releases.remote_assets(repo=repo, tag=tag)
+
         except (uploader.command.GhError, ValueError, OSError) as error:
             with self.lock:
                 alerts = self.upload_job.alerts + 1
@@ -119,16 +121,16 @@ class AssetDownloads(UploadSource):
         self.parts.mkdir(exist_ok=True)
         root.mkdir(parents=True, exist_ok=True)
         work = Path(tempfile.mkdtemp(prefix="download-", dir=self.parts))
-        results: collections.Counter[str] = collections.Counter()
-        failures: list[str] = []
-        failed: list[str] = []
-        fresh: list[str] = []
+        results: Counter[str] = collections.Counter()
+        failures: List[str] = []
+        failed: List[str] = []
+        fresh: List[str] = []
         total = sum(assets[name].size or 0 for group in groups for name in group)
         before = 0
         self._set_upload(item_progress={uploader.parts.group_key(name=group[0]): "Queued" for group in groups})
 
         try:
-            for index, group in enumerate(groups):
+            for index, group in enumerate(iterable=groups):
                 if self.upload_cancel.is_set():
                     break
 
@@ -143,7 +145,7 @@ class AssetDownloads(UploadSource):
                     label: str = label,
                     before: int = before,
                     key: str = key,
-                    group: list[str] = group,
+                    group: List[str] = group,
                 ) -> None:
                     self._meter(label=label, done=before + got, total=total)
                     size = sum(assets[name].size or 0 for name in group)
@@ -172,16 +174,19 @@ class AssetDownloads(UploadSource):
                     # Scanned after each one, so the source panel fills in as files arrive.
                     self._set_upload(fresh_folders=list(fresh))
                     self._scan_source()
+
                 except (uploader.command.GhError, OSError, zipfile.BadZipFile, shutil.Error) as error:
                     failures.append(f"{key}: {error}")
                     failed += group
                     self._log_folder(folder_name=owner, text=f"failed: {error}", level="error")
+
                 except Cancelled:
                     self._log_folder(folder_name=owner, text="cancelled, nothing was saved", level="warn")
                     break
 
                 before += sum(assets[name].size or 0 for name in group)
                 self._set_item(key=key)
+
         finally:
             shutil.rmtree(path=work, ignore_errors=True)
             self._end_meter()

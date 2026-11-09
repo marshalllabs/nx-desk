@@ -1,6 +1,7 @@
 from ... import uploader
-from ...names import format_size
-from ...schemas.github import UploadSnapshot
+from ...schemas.github import RetryState, UploadSnapshot
+from ...schemas.presentation import FolderStamp, ItemProgressStamp, UploadPaintStamp
+from ...utils.sizes import format_size
 from ..dialogs import show_message
 from ..repo_picker import show_repo
 from ..rows import format_time, release_labels
@@ -39,9 +40,11 @@ class Painting(CompareView, Trees):
 
             self.progress.setValue(int(1000 * fraction))
             self.progress_label.setText(" · ".join(parts))
+
         elif job.phase == "uploading":
             self.progress.setValue(int(1000 * job.done / max(1, job.total)))
             self.progress_label.setText(f"Working {job.done}/{job.total}")
+
         else:
             self.progress.setValue(0)
             self.progress_label.setText("")
@@ -55,22 +58,24 @@ class Painting(CompareView, Trees):
             if job.source != self.source.text():
                 self.source.setText(job.source)
 
-        key = (
-            job.phase,
-            job.tree,
-            job.done,
-            job.message,
-            job.failed,
-            job.runs,
-            job.alerts,
-            job.release_list,
-            job.repo_list,
-            job.asset_list,
-            tuple((folder.name, folder.status, folder.progress) for folder in job.folders),
-            tuple(job.item_progress.items()),
-            tuple(dict(job.transfer).values()) if job.transfer else (),
-            job.compare_list,
-            (job.retry_kind, tuple(job.retry_names), job.retry_tag),
+        key = UploadPaintStamp(
+            phase=job.phase,
+            tree=job.tree,
+            done=job.done,
+            message=job.message,
+            failed=job.failed,
+            runs=job.runs,
+            alerts=job.alerts,
+            release_list=job.release_list,
+            repo_list=job.repo_list,
+            asset_list=job.asset_list,
+            folders=[
+                FolderStamp(name=folder.name, status=folder.status, progress=folder.progress) for folder in job.folders
+            ],
+            item_progress=[ItemProgressStamp(key=name, text=text) for name, text in job.item_progress.items()],
+            transfer=job.transfer.model_copy() if job.transfer else None,
+            compare_list=job.compare_list,
+            retry=RetryState(kind=job.retry_kind, names=job.retry_names, tag=job.retry_tag),
         )
 
         if key == self.painted:
@@ -103,7 +108,7 @@ class Painting(CompareView, Trees):
             self.save()
             self.fill_compare_box()
 
-        self.retry_job = (job.retry_kind, list(job.retry_names), job.retry_tag)
+        self.retry_job = RetryState(kind=job.retry_kind, names=job.retry_names, tag=job.retry_tag)
         self.cancel_button.setVisible(job.phase == "uploading")
         self.paint_transfer(job=job)
         assets = {asset.name: asset for asset in job.assets}

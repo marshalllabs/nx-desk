@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
@@ -25,8 +26,8 @@ from .model import type_text
 class PortDetail(QStackedWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.shown: str | None = None
-        self.art_image: QImage | None = None
+        self.shown: Optional[str] = None
+        self.art_image: Optional[QImage] = None
         # The banner scales with the pane, so it can be dragged much wider than its base size.
         self.setMinimumWidth(ART_SIZE[0] + SPACE["sm"])
         self.setMaximumWidth(900)
@@ -72,7 +73,7 @@ class PortDetail(QStackedWidget):
         self.addWidget(empty)
         self.setCurrentIndex(1)
 
-    def show_port(self, port: Port | None, banner: QImage | None, needs_key: bool) -> None:
+    def show_port(self, port: Optional[Port], banner: Optional[QImage], needs_key: bool) -> None:
         key = port.id if port else None
 
         if key != self.shown:
@@ -104,7 +105,7 @@ class PortDetail(QStackedWidget):
             return
 
         width = max(1, self.pane.viewport().width())
-        height = round(width * ART_SIZE[1] / ART_SIZE[0])
+        height = round(number=width * ART_SIZE[1] / ART_SIZE[0])
         picture = QPixmap.fromImage(self.art_image).scaled(
             width,
             height,

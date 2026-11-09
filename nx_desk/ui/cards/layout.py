@@ -1,3 +1,5 @@
+from typing import Tuple
+
 # The size of a card in a grid and which cards are in view. No toolkit here, so the tests can import it.
 # A model hands out the Card of a row under this role (Qt.ItemDataRole.UserRole + 1).
 CARD_ROLE = 0x0101
@@ -20,15 +22,15 @@ def columns(width: int, cell_width: int = MIN_CELL) -> int:
 
 
 # The cover that fits a cell of this width, in the shape of SHAPE.
-def cover_size(cell_width: int) -> tuple[int, int]:
+def cover_size(cell_width: int) -> Tuple[int, int]:
     width = cell_width - 2 * (MARGIN + PAD)
 
-    return width, round(width * SHAPE[1] / SHAPE[0])
+    return width, round(number=width * SHAPE[1] / SHAPE[0])
 
 
 # As many cells as fit across the view, each widened to share what is left (up to MAX_CELL), so no strip
 # stays empty at the right. A cell holds the cover, the name on up to two lines and the platform on one.
-def cell_size(width: int, line: int) -> tuple[int, int]:
+def cell_size(width: int, line: int) -> Tuple[int, int]:
     cell_width = min(width // columns(width=width), MAX_CELL) if width >= MIN_CELL else MIN_CELL
     cover_height = cover_size(cell_width=cell_width)[1]
 
@@ -40,10 +42,10 @@ def visible_slice(
     scroll: int,
     width: int,
     height: int,
-    cell: tuple[int, int],
+    cell: Tuple[int, int],
     total: int,
     extra_rows: int = 1,
-) -> tuple[int, int]:
+) -> Tuple[int, int]:
     per_row = columns(width=width, cell_width=cell[0])
     first_row = max(0, scroll // cell[1])
     last_row = max(0, scroll + height - 1) // cell[1] + extra_rows

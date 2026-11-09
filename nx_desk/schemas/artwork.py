@@ -1,4 +1,5 @@
-from typing import Literal, Protocol
+from pathlib import Path
+from typing import Dict, List, Literal, Optional, Protocol
 
 from pydantic import BaseModel, TypeAdapter
 
@@ -33,4 +34,31 @@ class ArtLookup(BaseModel):
     rules: int = 0
 
 
-ART_LOOKUPS: TypeAdapter[dict[str, ArtLookup]] = TypeAdapter(dict[str, ArtLookup])
+ART_LOOKUPS: TypeAdapter[Dict[str, ArtLookup]] = TypeAdapter(type=Dict[str, ArtLookup])
+
+
+class ArtSources(BaseModel):
+    cover: str = ""
+    background: str = ""
+
+
+class ArtFiles(BaseModel):
+    cover: Optional[Path] = None
+    background: Optional[Path] = None
+
+
+class ArtStatus(BaseModel):
+    place: SecretPlace
+    error: str
+
+
+class ArtItemStamp(BaseModel):
+    id: str
+    cover: str
+    background: str
+
+
+class ArtStamp(BaseModel):
+    catalog: str
+    version: int
+    items: List[ArtItemStamp]

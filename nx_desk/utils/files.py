@@ -5,7 +5,7 @@ from pathlib import Path
 def sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
 
-    with open(path, "rb") as handle:
+    with open(file=path, mode="rb") as handle:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
 

@@ -1,6 +1,5 @@
 import threading
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 from PySide6.QtGui import QAction, QImage
 from PySide6.QtWidgets import (
@@ -17,10 +16,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...schemas.artwork import ArtFiles, ArtStamp
+from ...schemas.presentation import DownloadChoice
 from ...schemas.snapshot import ModRow
 from ..art import ART_SIZE
 from ..cards.grid import CardGrid
-from ..rows import Choice, SortState
+from ..rows import SortState
 from ..widgets.choice_popup import ChoicePopup
 from ..widgets.click_label import ClickLabel
 from ..widgets.log_pane import LogPane
@@ -40,38 +41,38 @@ class CatalogTabState(QWidget):
 
     app: "App"
     vault: "Vault"
-    items: dict[str, ModRow]
-    shown_ids: list[str] | None
-    selected: str | None
-    picked: set[str]
+    items: Dict[str, ModRow]
+    shown_ids: Optional[List[str]]
+    selected: Optional[str]
+    picked: Set[str]
     list_sort: SortState
-    chosen: list[str]
-    missing: list[str]
-    updates: list[str]
+    chosen: List[str]
+    missing: List[str]
+    updates: List[str]
     # Downloaded and up to date, for Re-download all and Re-download selected.
-    redo_all: list[str]
-    redo_chosen: list[str]
+    redo_all: List[str]
+    redo_chosen: List[str]
     # What the two download buttons do now: their labels and the mods they take.
-    download_choice: Choice
-    redownload_choice: Choice
+    download_choice: DownloadChoice
+    redownload_choice: DownloadChoice
     download_action: QAction
     redownload_action: QAction
-    detail_id: str | None
-    detail_key: tuple[str, str] | None
-    art_id: str | None
+    detail_id: Optional[str]
+    detail_key: Optional[Tuple[str, str]]
+    art_id: Optional[str]
     # The banner of the shown game, drawn at twice ART_SIZE and scaled to the pane.
-    art_image: QImage | None
-    art_cache: dict[tuple[str, str], QImage | None]
-    art_files: dict[tuple[str, str], tuple[Path | None, Path | None]]
-    art_signature: tuple[object, ...] | None
-    genres: list[str]
-    selected_genres: set[str]
-    status_filter: set[str]
-    downloading: set[str]
+    art_image: Optional[QImage]
+    art_cache: Dict[Tuple[str, str], Optional[QImage]]
+    art_files: Dict[Tuple[str, str], ArtFiles]
+    art_signature: Optional[ArtStamp]
+    genres: List[str]
+    selected_genres: Set[str]
+    status_filter: Set[str]
+    downloading: Set[str]
     reported_batch: int
     catalog_text: str
-    active_catalog: str | None
-    shown_auto_repos: int | None
+    active_catalog: Optional[str]
+    shown_auto_repos: Optional[int]
     restoring: bool
     views: QStackedWidget
     log: LogPane
@@ -82,13 +83,13 @@ class CatalogTabState(QWidget):
     grid: CardGrid
     grid_empty: QLabel
     sort_button: QToolButton
-    art_threads: list[threading.Thread]
+    art_threads: List[threading.Thread]
     catalog_button: QPushButton
     refresh_action: QAction
-    mode_actions: dict[str, QAction]
+    mode_actions: Dict[str, QAction]
     mode_button: QToolButton
-    sort_actions: dict[str, QAction]
-    sort_direction_actions: dict[bool, QAction]
+    sort_actions: Dict[str, QAction]
+    sort_direction_actions: Dict[bool, QAction]
     summary: QLabel
     summary_spinner: Spinner
     new_label: ClickLabel
@@ -111,7 +112,7 @@ class CatalogTabState(QWidget):
     genre_popup: ChoicePopup
     status_button: QPushButton
     status_popup: ChoicePopup
-    list_only: list[QWidget]
+    list_only: List[QWidget]
     overall_row: QWidget
     overall_label: QLabel
     overall_bar: QProgressBar

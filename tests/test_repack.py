@@ -5,8 +5,8 @@ import time
 import unittest
 import zipfile
 import zlib
-from collections.abc import Iterable
 from pathlib import Path
+from typing import Iterable
 from unittest import mock
 
 from nx_desk import config as settings
@@ -43,19 +43,27 @@ class RepackTests(unittest.TestCase):
                 sep = "\\" if "\\" in prefix else "/"
                 result = self.repacked(names=[f"{prefix}{TITLE}{sep}romfs{sep}a.bin"])
                 self.assertEqual(
-                    result.namelist(),
-                    ["contents/", f"contents/{TITLE}/", f"contents/{TITLE}/romfs/", f"contents/{TITLE}/romfs/a.bin"],
+                    first=result.namelist(),
+                    second=[
+                        "contents/",
+                        f"contents/{TITLE}/",
+                        f"contents/{TITLE}/romfs/",
+                        f"contents/{TITLE}/romfs/a.bin",
+                    ],
                 )
 
     def test_files_use_deflate_and_keep_content(self) -> None:
         result = self.repacked(names=[f"{TITLE}/romfs/a.bin"])
         info = result.getinfo(name=f"contents/{TITLE}/romfs/a.bin")
-        self.assertEqual(info.compress_type, zipfile.ZIP_DEFLATED)
-        self.assertTrue(result.read(info).startswith(b"data "))
+        self.assertEqual(first=info.compress_type, second=zipfile.ZIP_DEFLATED)
+        self.assertTrue(expr=result.read(info).startswith(b"data "))
 
     def test_ignores_instructions_and_junk(self) -> None:
         result = self.repacked(names=[f"{TITLE}/romfs/a", "HUONG_DAN.txt", "__MACOSX/x", f"{TITLE}/.DS_Store"])
-        self.assertEqual([n for n in result.namelist() if not n.endswith("/")], [f"contents/{TITLE}/romfs/a"])
+        self.assertEqual(
+            first=[n for n in result.namelist() if not n.endswith("/")],
+            second=[f"contents/{TITLE}/romfs/a"],
+        )
 
     def test_rejects_unexpected_layouts(self) -> None:
         cases = {
@@ -67,13 +75,13 @@ class RepackTests(unittest.TestCase):
         }
 
         for name, members in cases.items():
-            with self.subTest(name):
+            with self.subTest(msg=name):
                 target = self.dir / "out.zip"
 
-                with self.assertRaises(RuntimeError):
+                with self.assertRaises(expected_exception=RuntimeError):
                     zips.repack(source=self.zip_with(names=members), target=target, title_id=TITLE)
 
-                self.assertFalse(target.exists())
+                self.assertFalse(expr=target.exists())
 
 
 class DeflateTests(unittest.TestCase):
@@ -94,8 +102,8 @@ class DeflateTests(unittest.TestCase):
                 info = archive.getinfo(name=f"contents/{TITLE}/romfs/a.bin")
 
         packer = zlib.compressobj(level=9, method=zlib.DEFLATED, wbits=-15)
-        self.assertEqual(info.compress_type, zipfile.ZIP_DEFLATED)
-        self.assertEqual(info.compress_size, len(packer.compress(data) + packer.flush()))
+        self.assertEqual(first=info.compress_type, second=zipfile.ZIP_DEFLATED)
+        self.assertEqual(first=info.compress_size, second=len(packer.compress(data) + packer.flush()))
 
 
 class CompressionTests(unittest.TestCase):
@@ -115,12 +123,12 @@ class CompressionTests(unittest.TestCase):
                 zips.repack(source=source, target=target, title_id=TITLE, level=level)
 
                 with zipfile.ZipFile(file=target) as archive:
-                    self.assertEqual(archive.read(f"contents/{TITLE}/romfs/a.bin"), body)
+                    self.assertEqual(first=archive.read(f"contents/{TITLE}/romfs/a.bin"), second=body)
 
                 sizes.append(target.stat().st_size)
 
-            self.assertEqual(max(sizes), sizes[0])
-            self.assertLess(sizes[-1], sizes[0] / 2)
+            self.assertEqual(first=max(sizes), second=sizes[0])
+            self.assertLess(a=sizes[-1], b=sizes[0] / 2)
 
 
 class RepackQueueTests(unittest.TestCase):
@@ -145,21 +153,22 @@ class RepackQueueTests(unittest.TestCase):
         return source
 
     def download(self, source: Path) -> Mod:
-        _, _, item, cancel = self.store.queue.get()
+        task = self.store.queue.get()
+        item, cancel = task.entry, task.cancel
 
-        with mock.patch.object(self.store, "_download", return_value=Fetched(wire=source)):
+        with mock.patch.object(target=self.store, attribute="_download", return_value=Fetched(wire=source)):
             self.store._run_download(entry=item, cancel=cancel)
 
         return item
 
     def test_a_finished_download_waits_for_repacking_without_its_slot(self) -> None:
         item = self.download(source=self.queued())
-        self.assertEqual(self.store.jobs[item.id].phase, "waiting_repack")
-        self.assertTrue(self.store.busy())
-        self.assertEqual(list(self.store.root.rglob(pattern="*.zip")), [])
+        self.assertEqual(first=self.store.jobs[item.id].phase, second="waiting_repack")
+        self.assertTrue(expr=self.store.busy())
+        self.assertEqual(first=list(self.store.root.rglob(pattern="*.zip")), second=[])
         self.store._repack_next()
-        self.assertFalse(self.store.busy())
-        self.assertEqual(self.store.status_of(entry=item), "ok")
+        self.assertFalse(expr=self.store.busy())
+        self.assertEqual(first=self.store.status_of(entry=item), second="ok")
 
     def test_a_slow_repack_does_not_hold_up_the_next_download(self) -> None:
         first, second = self.queued(name="First", size=1000), self.queued(name="Second", size=2000)
@@ -171,19 +180,23 @@ class RepackQueueTests(unittest.TestCase):
             release.wait(timeout=5)
 
         with (
-            mock.patch.object(self.store, "_download", side_effect=[Fetched(wire=first), Fetched(wire=second)]),
-            mock.patch.object(zips, "repack", side_effect=slow),
+            mock.patch.object(
+                target=self.store,
+                attribute="_download",
+                side_effect=[Fetched(wire=first), Fetched(wire=second)],
+            ),
+            mock.patch.object(target=zips, attribute="repack", side_effect=slow),
         ):
             threading.Thread(target=self.store.worker, daemon=True).start()
             threading.Thread(target=self.store.repack_worker, daemon=True).start()
-            self.assertTrue(repacking.wait(timeout=5))
+            self.assertTrue(expr=repacking.wait(timeout=5))
             deadline = time.monotonic() + 5
 
             while self.store.jobs["second"].phase != "waiting_repack" and time.monotonic() < deadline:
                 time.sleep(0.01)
 
-            self.assertEqual(self.store.jobs["first"].phase, "repacking")
-            self.assertEqual(self.store.jobs["second"].phase, "waiting_repack")
+            self.assertEqual(first=self.store.jobs["first"].phase, second="repacking")
+            self.assertEqual(first=self.store.jobs["second"].phase, second="waiting_repack")
             release.set()
             # The workers write state and logs while finishing, so they end before the folder goes.
             deadline = time.monotonic() + 5
@@ -191,33 +204,33 @@ class RepackQueueTests(unittest.TestCase):
             while self.store.busy() and time.monotonic() < deadline:
                 time.sleep(0.01)
 
-            self.assertFalse(self.store.busy())
+            self.assertFalse(expr=self.store.busy())
 
     def test_the_smallest_download_repacks_first(self) -> None:
         large, small = self.queued(name="Large", size=2000), self.queued(name="Small", size=1000)
         self.download(source=small)
         self.download(source=large)
-        self.assertEqual(self.store.repack_queue.get()[2].id, "small")
+        self.assertEqual(first=self.store.repack_queue.get().entry.id, second="small")
 
     def test_a_stopped_download_is_not_repacked_and_keeps_its_file(self) -> None:
         source = self.queued()
         item = self.download(source=source)
         self.store.cancel(entry_id=item.id)
 
-        with mock.patch.object(zips, "repack") as repack:
+        with mock.patch.object(target=zips, attribute="repack") as repack:
             self.store._repack_next()
 
         repack.assert_not_called()
-        self.assertTrue(source.exists())
+        self.assertTrue(expr=source.exists())
 
     def test_a_failed_repack_is_reported_on_the_job(self) -> None:
         item = self.download(source=self.queued())
 
-        with mock.patch.object(zips, "repack", side_effect=RuntimeError("bad zip")):
+        with mock.patch.object(target=zips, attribute="repack", side_effect=RuntimeError("bad zip")):
             self.store._repack_next()
 
-        self.assertEqual(self.store.jobs[item.id].phase, "error")
-        self.assertEqual(self.store.batch.failed, 1)
+        self.assertEqual(first=self.store.jobs[item.id].phase, second="error")
+        self.assertEqual(first=self.store.batch.failed, second=1)
 
     def test_the_chosen_level_is_used_and_remembered(self) -> None:
         self.store.set_compression(level=0)
@@ -228,10 +241,10 @@ class RepackQueueTests(unittest.TestCase):
         with zipfile.ZipFile(file=target) as archive:
             member = next(info for info in archive.infolist() if info.filename.endswith("a.bin"))
 
-        self.assertEqual(member.compress_type, zipfile.ZIP_STORED)
-        self.assertEqual(vault.Vault(base=self.base).compression, 0)
-        self.assertEqual(self.store.status_of(entry=item), "ok")
+        self.assertEqual(first=member.compress_type, second=zipfile.ZIP_STORED)
+        self.assertEqual(first=vault.Vault(base=self.base).compression, second=0)
+        self.assertEqual(first=self.store.status_of(entry=item), second="ok")
 
     def test_an_unknown_level_falls_back(self) -> None:
         for value in (5, "9", None, True):
-            self.assertEqual(settings.clean_compression(value=value), settings.DEFAULT_COMPRESSION)
+            self.assertEqual(first=settings.clean_compression(value=value), second=settings.DEFAULT_COMPRESSION)

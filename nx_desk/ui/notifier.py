@@ -1,6 +1,7 @@
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QMainWindow, QSystemTrayIcon
@@ -14,7 +15,7 @@ class Notifier:
         self.icon_path = icon_path
         # The app's own icon, in place of the system's blue "information" one.
         self.icon = QIcon(str(icon_path))
-        self.tray: QSystemTrayIcon | None = None
+        self.tray: Optional[QSystemTrayIcon] = None
 
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray = QSystemTrayIcon(self.icon, window)

@@ -1,3 +1,5 @@
+from typing import List, Union
+
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
 
 from ...schemas.card import Card
@@ -30,20 +32,20 @@ class HomebrewModel(QAbstractTableModel):
     def __init__(self, order: SortState) -> None:
         super().__init__()
         self.order = order
-        self.rows: list[Homebrew] = []
+        self.rows: List[Homebrew] = []
 
-    def set_rows(self, rows: list[Homebrew]) -> None:
+    def set_rows(self, rows: List[Homebrew]) -> None:
         self.beginResetModel()
         self.rows = rows
         self.endResetModel()
 
-    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:  # noqa: B008
+    def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self.rows)
 
-    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:  # noqa: B008
+    def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(COLUMNS)
 
-    def data(self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+    def data(self, index: Union[QModelIndex, QPersistentModelIndex], role: int = Qt.ItemDataRole.DisplayRole) -> object:
         if not index.isValid() or not 0 <= index.row() < len(self.rows):
             return None
 

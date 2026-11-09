@@ -1,5 +1,5 @@
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Set
 
 from PySide6.QtCore import QItemSelectionModel, QPoint, Qt, QTimer
 from PySide6.QtGui import QAction, QImage, QShowEvent
@@ -40,13 +40,13 @@ class HomebrewsTab(QWidget):
     def __init__(self, app: "App") -> None:
         super().__init__()
         self.vault = app.vault
-        self.rows: list[Homebrew] = []
-        self.selected: Homebrew | None = None
-        self.groups: set[str] = set()
-        self.categories: set[str] = set()
+        self.rows: List[Homebrew] = []
+        self.selected: Optional[Homebrew] = None
+        self.groups: Set[str] = set()
+        self.categories: Set[str] = set()
         self.order = SortState(column="name")
         self.view = self.vault.homebrews_view
-        self.version: int | None = None
+        self.version: Optional[int] = None
         self.job = self.vault.homebrew_snapshot()
         self.art = ListArt(vault=self.vault, art_dir=self.vault.homebrews_art_dir)
         self.art_version = self.art.version_of()
@@ -132,7 +132,7 @@ class HomebrewsTab(QWidget):
         header.setHighlightSections(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        for index, (_, _, width) in enumerate(COLUMNS):
+        for index, (_, _, width) in enumerate(iterable=COLUMNS):
             header.setSectionResizeMode(
                 index,
                 QHeaderView.ResizeMode.Interactive if width else QHeaderView.ResizeMode.Stretch,
@@ -196,6 +196,7 @@ class HomebrewsTab(QWidget):
 
         if chosen:
             values.add(name)
+
         else:
             values.discard(name)
 
@@ -240,7 +241,7 @@ class HomebrewsTab(QWidget):
         self.selected = None
 
         if found:
-            row = next((index for index, entry in enumerate(found) if entry.id == keep), 0)
+            row = next((index for index, entry in enumerate(iterable=found) if entry.id == keep), 0)
             self.table.selectionModel().setCurrentIndex(
                 self.model.index(row, 0),
                 QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows,
@@ -282,7 +283,7 @@ class HomebrewsTab(QWidget):
     def paint_detail(self) -> None:
         self.detail.show_entry(row=self.selected, banner=self.picture(), needs_key=self.art.needs_key())
 
-    def picture(self) -> QImage | None:
+    def picture(self) -> Optional[QImage]:
         if self.selected is None:
             return None
 
@@ -293,7 +294,7 @@ class HomebrewsTab(QWidget):
 
         return banner
 
-    def visible_entries(self) -> list[Homebrew]:
+    def visible_entries(self) -> List[Homebrew]:
         if self.view == "grid":
             start, end = self.grid.shown_rows(total=len(self.model.rows))
 

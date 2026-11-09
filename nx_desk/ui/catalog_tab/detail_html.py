@@ -1,8 +1,9 @@
 import html
-from collections.abc import Sequence
+from typing import List, Sequence
 
-from ...names import format_size
+from ...schemas.presentation import InfoField
 from ...schemas.snapshot import ModRow
+from ...utils.sizes import format_size
 from ..theme import COLORS
 
 
@@ -43,8 +44,8 @@ def detail_html(item: ModRow) -> str:
         )
         parts.append(f'<p style="margin-top:0; line-height:150%">{chips}</p>')
 
-    info: list[tuple[str, str, str | None]] = [
-        (key, value, None)
+    info: List[InfoField] = [
+        InfoField(key=key, value=value, color=None)
         for key, value in (
             ("Developer", item.developer),
             ("Released", item.release),
@@ -52,14 +53,20 @@ def detail_html(item: ModRow) -> str:
         )
         if value
     ]
-    info.append(("Mod version", item.version or "-", None))
-    info.append(("Game version", item.game_version or "Miss", None if item.game_version else c["miss"]))
-    info.append(("Title ID", item.title_id, None))
-    info.append(("Download size", format_size(value=item.size), None))
+    info.append(InfoField(key="Mod version", value=item.version or "-", color=None))
+    info.append(
+        InfoField(
+            key="Game version",
+            value=item.game_version or "Miss",
+            color=None if item.game_version else c["miss"],
+        ),
+    )
+    info.append(InfoField(key="Title ID", value=item.title_id, color=None))
+    info.append(InfoField(key="Download size", value=format_size(value=item.size), color=None))
     rows = "".join(
-        f'<tr><td width="128" style="color:{c["muted"]}">{html.escape(s=key)}</td>'
-        f'<td style="color:{color or c["ink"]}">{text(value=value)}</td></tr>'
-        for key, value, color in info
+        f'<tr><td width="128" style="color:{c["muted"]}">{html.escape(s=field.key)}</td>'
+        f'<td style="color:{field.color or c["ink"]}">{text(value=field.value)}</td></tr>'
+        for field in info
     )
     parts.append(heading(title="Info") + f'<table cellspacing="0" cellpadding="2">{rows}</table>')
 

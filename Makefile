@@ -22,18 +22,16 @@ check: $(VENV_READY) ## Print available updates
 	$(VENV_PYTHON) main.py --check
 
 test: $(VENV_READY) ## Run the test suite
-	$(VENV_PYTHON) -B -m unittest discover -s tests
+	$(VENV_PYTHON) -B -m tests.run
 
 lint: $(VENV_READY) ## Check style and types
 	$(VENV_PYTHON) -m ruff check .
 	$(VENV_PYTHON) -m ruff format --check .
-	$(VENV_PYTHON) -B scripts/space_blocks.py --check
 	$(VENV_PYTHON) -m mypy
 	$(VENV_PYTHON) -m pyright
 
 format: $(VENV_READY) ## Fix style problems and format the code
 	$(VENV_PYTHON) -m ruff check --fix .
-	$(VENV_PYTHON) -B scripts/space_blocks.py
 	$(VENV_PYTHON) -m ruff format .
 	@# Formatting can split a bracket over lines, which COM812 then gives a trailing comma.
 	$(VENV_PYTHON) -m ruff check --fix --select COM812 .
@@ -42,6 +40,6 @@ format: $(VENV_READY) ## Fix style problems and format the code
 build: $(VENV_READY) ## Build dist/NXDesk-<platform>-<arch>.zip
 	$(VENV_PYTHON) -B scripts/build.py
 
-clean: ## Remove build output, the build environment and caches
-	rm -rf dist $(VENV)
-	find . -name __pycache__ -type d -prune -exec rm -rf {} +
+clean: ## Remove build output and project bytecode caches
+	rm -rf dist
+	find . -path './$(VENV)' -prune -o -name __pycache__ -type d -prune -exec rm -rf {} +

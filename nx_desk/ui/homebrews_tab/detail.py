@@ -1,3 +1,5 @@
+from typing import Optional
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QPushButton, QSizePolicy, QStackedWidget, QTextBrowser, QVBoxLayout, QWidget
@@ -11,8 +13,8 @@ from ..widgets.resize_watch import ResizeWatch
 class HomebrewDetail(QStackedWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.shown: Homebrew | None = None
-        self.art_image: QImage | None = None
+        self.shown: Optional[Homebrew] = None
+        self.art_image: Optional[QImage] = None
         self.setMinimumWidth(280)
         self.setMaximumWidth(700)
         page = QWidget()
@@ -43,7 +45,7 @@ class HomebrewDetail(QStackedWidget):
         self.setCurrentIndex(1)
         ResizeWatch(widget=self.art, changed=self.fit_art)
 
-    def show_entry(self, row: Homebrew | None, banner: QImage | None, needs_key: bool) -> None:
+    def show_entry(self, row: Optional[Homebrew], banner: Optional[QImage], needs_key: bool) -> None:
         self.setCurrentIndex(0 if row else 1)
         self.hint.setVisible(row is not None and needs_key)
 
@@ -80,7 +82,7 @@ class HomebrewDetail(QStackedWidget):
             return
 
         width = max(1, self.art.width())
-        height = round(width * ART_SIZE[1] / ART_SIZE[0])
+        height = round(number=width * ART_SIZE[1] / ART_SIZE[0])
         image = QPixmap.fromImage(self.art_image).scaled(
             width,
             height,

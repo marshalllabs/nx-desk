@@ -1,6 +1,6 @@
-import json
 import os
 from pathlib import Path
+from typing import Optional
 
 from ..config import (
     ART_LOOKUPS_FILE,
@@ -15,6 +15,8 @@ from ..config import (
     TITLE_IDS_FILE,
 )
 from ..names import art_name, art_stem_of
+from ..schemas.files import FileMove, LegacyCatalogFile
+from ..utils.json import parse_json
 
 # The files of the first layout, in .catalogs/, and where each one lives now.
 OLD_SETTINGS = "index.json"
@@ -34,7 +36,8 @@ def move(source: Path, target: Path) -> None:
 # instead, which is what the app looks for now, so no image is fetched again.
 def rename_art(index: Path, art_dir: Path) -> None:
     try:
-        saved = json.loads(s=index.read_text(encoding="utf-8"))
+        saved = parse_json(text=index.read_text(encoding="utf-8"))
+
     except (OSError, ValueError):
         saved = {}
 
@@ -50,17 +53,17 @@ def rename_art(index: Path, art_dir: Path) -> None:
     index.unlink(missing_ok=True)
 
 
-def split(name: str) -> tuple[str, str | None] | None:
+def split(name: str) -> Optional[LegacyCatalogFile]:
     # The old settings are not a catalog's file, whether or not they have moved.
     if name == OLD_SETTINGS:
         return None
 
     for ending, new_name in OLD_ENDINGS:
         if name.endswith(ending):
-            return name[: -len(ending)], new_name
+            return LegacyCatalogFile(folder=name[: -len(ending)], name=new_name)
 
     if name.endswith(".json") and not name.startswith("_"):
-        return name[: -len(".json")], CATALOG_FILE
+        return LegacyCatalogFile(folder=name[: -len(".json")], name=CATALOG_FILE)
 
     return None
 
@@ -74,12 +77,13 @@ def migrate_layout(base: Path) -> None:
     if not catalogs.is_dir():
         return
 
-    steps = [(catalogs / OLD_SETTINGS, base / SETTINGS_FILE)]
-    steps += [(catalogs / old, base / CACHE_DIR / new) for old, new in OLD_CACHES.items()]
+    steps = [FileMove(source=catalogs / OLD_SETTINGS, target=base / SETTINGS_FILE)]
+    steps += [FileMove(source=catalogs / old, target=base / CACHE_DIR / new) for old, new in OLD_CACHES.items()]
 
-    for source, target in steps:
+    for step in steps:
         try:
-            move(source=source, target=target)
+            move(source=step.source, target=step.target)
+
         except OSError:
             continue
 
@@ -90,14 +94,17 @@ def migrate_layout(base: Path) -> None:
             if parts is None:
                 continue
 
-            folder, new_name = parts
+            folder, new_name = parts.folder, parts.name
 
             if folder == NO_CATALOG:
                 path.unlink(missing_ok=True)
+
             elif new_name is None:
                 rename_art(index=path, art_dir=base / "covers" / folder)
+
             else:
                 move(source=path, target=catalogs / folder / new_name)
+
         except OSError:
             continue
 
@@ -105,5 +112,6 @@ def migrate_layout(base: Path) -> None:
     for leftover in (base / "covers" / NO_CATALOG,):
         try:
             leftover.rmdir()
+
         except OSError:
             pass

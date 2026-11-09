@@ -6,9 +6,9 @@ import os
 import queue
 import threading
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import DefaultDict, Dict, List, Optional, TypeVar, Union
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import JsonValue, TypeAdapter, ValidationError
 from pydantic_core import to_jsonable_python
 
 from .. import uploader
@@ -35,11 +35,11 @@ from ..config import (
     TITLE_IDS_FILE,
     clean_compression,
 )
-from ..names import BINARY, safe_name, set_size_units, title_name
+from ..names import safe_name, title_name
 from ..schemas.artwork import ART_LOOKUPS, ArtLookup, StoredSecret
 from ..schemas.catalog import Catalog, Mod
 from ..schemas.common import LogEntry
-from ..schemas.download import Batch, DownloadTask, Job, RepackTask
+from ..schemas.download import Batch, DownloadTask, Job, RepackTask, TransferMark
 from ..schemas.github import AutoUpload, UploadJob
 from ..schemas.homebrew import Homebrew
 from ..schemas.notice import Notice
@@ -48,6 +48,8 @@ from ..schemas.registry import REGISTRY, Registry
 from ..schemas.state import DOWNLOAD_RECORDS, RELEASE_STATE, DownloadRecord, ReleaseState
 from ..schemas.title import TitleRow
 from ..schemas.update import AppUpdate, UpdateJob
+from ..utils.json import parse_json
+from ..utils.sizes import BINARY, set_size_units
 from .layout import migrate_layout
 
 T = TypeVar("T")
@@ -62,7 +64,7 @@ def file_key(entry: Mod) -> str:
 
 
 class VaultBase:
-    def __init__(self, base: Path | str) -> None:
+    def __init__(self, base: Union[Path, str]) -> None:
         self.base = Path(base).resolve()
         # A folder made by an older version is brought to this layout before anything is read from it.
         migrate_layout(base=self.base)
@@ -75,37 +77,37 @@ class VaultBase:
         self.parts = self.base / ".parts"
         self.logs_dir = self.base / LOGS_DIR
         self.lock = threading.RLock()
-        self.jobs: dict[str, Job] = {}
-        self.cancels: dict[str, threading.Event] = {}
-        self.responses: dict[str, http.client.HTTPResponse] = {}
+        self.jobs: Dict[str, Job] = {}
+        self.cancels: Dict[str, threading.Event] = {}
+        self.responses: Dict[str, http.client.HTTPResponse] = {}
         # A server rate limit pauses every download worker until this monotonic time; a repeated
         # limit means the server has not reset yet, so the pause grows.
         self.rate_until: float = 0.0
         self.rate_strikes: int = 0
-        self.part_locks: collections.defaultdict[str, threading.Lock] = collections.defaultdict(threading.Lock)
+        self.part_locks: DefaultDict[str, threading.Lock] = collections.defaultdict(threading.Lock)
         # One repack at a time writes a given zip, whichever entries lead there.
-        self.target_locks: collections.defaultdict[Path, threading.Lock] = collections.defaultdict(threading.Lock)
+        self.target_locks: DefaultDict[Path, threading.Lock] = collections.defaultdict(threading.Lock)
         # Smallest first, wherever a download was started from. The counter settles equal sizes.
         self.queue: queue.PriorityQueue[DownloadTask] = queue.PriorityQueue()
         self.queue_order = itertools.count()
         self.repack_queue: queue.PriorityQueue[RepackTask] = queue.PriorityQueue()
-        self.download_log: list[LogEntry] = []
-        self.github_log: list[LogEntry] = []
+        self.download_log: List[LogEntry] = []
+        self.github_log: List[LogEntry] = []
         self.batch = self.new_batch()
         self.batch_number = 0
-        self.checked_at: float | None = None
-        self.check_error: str | None = None
+        self.checked_at: Optional[float] = None
+        self.check_error: Optional[str] = None
         self.checking = False
-        self.app_update: AppUpdate | None = None
-        self.app_update_job: UpdateJob | None = None
+        self.app_update: Optional[AppUpdate] = None
+        self.app_update_job: Optional[UpdateJob] = None
         self.upload_cancel = threading.Event()
         # One GitHub job at a time: manual uploads, downloads and deletes, and automatic uploads.
         self.github_lock = threading.Lock()
         self.auto_queue: queue.Queue[AutoUpload] = queue.Queue()
-        self.auto_thread: threading.Thread | None = None
+        self.auto_thread: Optional[threading.Thread] = None
         self.auto_pending = 0
         self.upload_job = UploadJob()
-        self.meter_mark: tuple[float, int] | None = None
+        self.meter_mark: Optional[TransferMark] = None
         self.title_version = 0
         self.title_loading = False
         self.title_error = ""
@@ -115,17 +117,17 @@ class VaultBase:
         self.homebrew_version = 0
         self.homebrew_loading = False
         self.homebrew_error = ""
-        self.homebrew_rows: list[Homebrew] = parse_homebrews(
+        self.homebrew_rows: List[Homebrew] = parse_homebrews(
             data=self._load_json(path=self.cache_dir / HOMEBREWS_FILE, default={}),
         )
         # None until gh has answered once.
-        self.gh_ready: bool | None = None
+        self.gh_ready: Optional[bool] = None
         registry = self._load_model(path=self.registry_path, schema=REGISTRY, default=Registry())
-        self.title_rows: list[TitleRow] = parse_title_ids(
+        self.title_rows: List[TitleRow] = parse_title_ids(
             data=self._load_json(path=self.cache_dir / TITLE_IDS_FILE, default={}),
         )
-        self.titles: dict[str, str] = game_names(rows=self.title_rows)
-        self.port_rows: list[Port] = parse_ports(data=self._load_json(path=self.cache_dir / PORTS_FILE, default={}))
+        self.titles: Dict[str, str] = game_names(rows=self.title_rows)
+        self.port_rows: List[Port] = parse_ports(data=self._load_json(path=self.cache_dir / PORTS_FILE, default={}))
         self.ports_art_dir = self.base / "covers" / PORTS_ART_FOLDER
         self.homebrews_art_dir = self.base / "covers" / HOMEBREWS_ART_FOLDER
         self.mod_name = safe_name(name=registry.mod_name)
@@ -146,15 +148,15 @@ class VaultBase:
         self.font_family = registry.font_family
         self.font_size = registry.font_size
         # Desktop notifications waiting for the window, which takes them with take_notices.
-        self.notices: list[Notice] = []
+        self.notices: List[Notice] = []
         set_size_units(units=self.size_units)
         self.compression = clean_compression(value=registry.compression)
         # SteamGridDB art: where the key is kept, the key once read (None until then), the cached
         # lookups by game name, and why lookups stopped. art_version changes with the key.
         self.art_key: StoredSecret = registry.art_key
-        self.art_secret: str | None = None
+        self.art_secret: Optional[str] = None
         self.art_lookups_path = self.cache_dir / ART_LOOKUPS_FILE
-        self.art_lookups: dict[str, ArtLookup] = self._load_model(
+        self.art_lookups: Dict[str, ArtLookup] = self._load_model(
             path=self.art_lookups_path,
             schema=ART_LOOKUPS,
             default={},
@@ -167,7 +169,7 @@ class VaultBase:
         # SteamGridDB requests in flight, for the note at the foot of the window.
         self.art_active = 0
         self.release_error = ""
-        self.catalogs: list[Catalog] = registry.catalogs
+        self.catalogs: List[Catalog] = registry.catalogs
         active = next((c for c in self.catalogs if c.folder == registry.active), None)
         self._use_catalog(catalog=active or (self.catalogs[0] if self.catalogs else None))
 
@@ -178,15 +180,15 @@ class VaultBase:
             for entry_id in failed:
                 del self.jobs[entry_id]
 
-    def _use_catalog(self, catalog: Catalog | None) -> None:
+    def _use_catalog(self, catalog: Optional[Catalog]) -> None:
         self._clear_failed_jobs()
-        self.catalog: Catalog | None = catalog
+        self.catalog: Optional[Catalog] = catalog
         folder = catalog.folder if catalog else NO_CATALOG
         self.root = self._download_root() / folder
         self.art_dir = self.base / "covers" / folder
         self.state_path = self._catalog_file(folder=folder, name=STATE_FILE)
         self.cache_path = self._catalog_file(folder=folder, name=CATALOG_FILE)
-        self.state: dict[str, DownloadRecord] = self._load_model(
+        self.state: Dict[str, DownloadRecord] = self._load_model(
             path=self.state_path,
             schema=DOWNLOAD_RECORDS,
             default={},
@@ -196,7 +198,7 @@ class VaultBase:
             schema=RELEASE_STATE,
             default=ReleaseState(),
         )
-        self.items: list[Mod] = []
+        self.items: List[Mod] = []
         self.checked_at = None
         self.check_error = None
 
@@ -204,6 +206,7 @@ class VaultBase:
             mapping = clean_mapping(mapping=catalog.mapping) if catalog else None
             document = parse_catalog(data=json.loads(s=self.cache_path.read_bytes()), mapping=mapping)
             self.items = self._named(items=document.items)
+
         except (OSError, ValueError):
             pass
 
@@ -211,9 +214,9 @@ class VaultBase:
     # Switch title, would give them all one official name, so each keeps its catalog name.
     # Entries of the same file share one download, saved under the official name of the first,
     # else its catalog name.
-    def _named(self, items: list[Mod]) -> list[Mod]:
+    def _named(self, items: List[Mod]) -> List[Mod]:
         titles = collections.Counter(item.title_id.upper() for item in items if item.title_id)
-        files: dict[str, list[Mod]] = {}
+        files: Dict[str, List[Mod]] = {}
 
         for item in items:
             key = file_key(entry=item)
@@ -221,7 +224,7 @@ class VaultBase:
             if key:
                 files.setdefault(key, []).append(item)
 
-        named: list[Mod] = []
+        named: List[Mod] = []
 
         for item in items:
             catalog_name = item.catalog_name or item.name
@@ -248,7 +251,7 @@ class VaultBase:
 
     # An entry and the ones that share its file, itself first.
     @staticmethod
-    def _ids_of(entry: Mod) -> list[str]:
+    def _ids_of(entry: Mod) -> List[str]:
         return [entry.id, *entry.twins]
 
     # The entry, of those sharing a file with entry_id, that holds the running job, if any.
@@ -260,7 +263,7 @@ class VaultBase:
             return next((other for other in ids if other in self.jobs), entry_id)
 
     # The download record of an entry, or of another entry of the same file.
-    def _record_of(self, entry: Mod) -> DownloadRecord | None:
+    def _record_of(self, entry: Mod) -> Optional[DownloadRecord]:
         return next((self.state[other] for other in self._ids_of(entry=entry) if other in self.state), None)
 
     def _save_registry(self) -> None:
@@ -307,9 +310,10 @@ class VaultBase:
         )
 
     @staticmethod
-    def _load_json(path: Path, default: Any) -> Any:
+    def _load_json(path: Path, default: JsonValue) -> JsonValue:
         try:
-            return json.loads(s=path.read_text(encoding="utf-8"))
+            return parse_json(text=path.read_text(encoding="utf-8"))
+
         except (OSError, ValueError):
             return default
 
@@ -324,18 +328,19 @@ class VaultBase:
 
         try:
             return schema.validate_python(data)
+
         except ValidationError:
             return default
 
     # Models are written as plain JSON, the same as the dicts they replaced.
     def _write_json(self, path: Path, value: object) -> None:
         text = json.dumps(obj=to_jsonable_python(value), ensure_ascii=False, indent=1)
-        self._write_bytes(path=path, data=text.encode("utf-8"))
+        self._write_bytes(path=path, data=text.encode(encoding="utf-8"))
 
     def _write_bytes(self, path: Path, data: bytes) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         temp = path.with_suffix(suffix=".tmp")
-        temp.write_bytes(data)
+        temp.write_bytes(data=data)
         os.replace(src=temp, dst=path)
 
     @staticmethod

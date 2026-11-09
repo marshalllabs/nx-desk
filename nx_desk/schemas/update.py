@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -10,7 +12,7 @@ class AppAsset(BaseModel):
 class AppUpdate(BaseModel):
     tag: str
     url: str
-    asset: AppAsset | None
+    asset: Optional[AppAsset]
 
 
 # The self-update download, while it runs; empty fields until it starts.

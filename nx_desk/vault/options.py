@@ -2,7 +2,8 @@ import shutil
 from pathlib import Path
 
 from ..config import clean_compression
-from ..names import safe_name, set_size_units
+from ..names import safe_name
+from ..utils.sizes import set_size_units
 from .jobs import Jobs
 
 

@@ -1,4 +1,5 @@
 import json
+from typing import Dict
 from unittest import mock
 
 from nx_desk import config as settings
@@ -9,24 +10,27 @@ from tests.helpers import TITLE, mod
 
 class NameTests(DownloadCase):
     def test_update_title_uses_the_base_game_name(self) -> None:
-        self.assertEqual(names.title_name(names={"0100BA4026E94000": "Game"}, title="0100BA4026E94800"), "Game")
+        self.assertEqual(
+            first=names.title_name(names={"0100BA4026E94000": "Game"}, title="0100BA4026E94800"),
+            second="Game",
+        )
 
     def test_downloads_use_the_title_database_name(self) -> None:
         self.store.titles = {TITLE: "Real Game™"}
         item = self.store._named(items=[mod(name="Catalog Name")])[0]
-        self.assertEqual((item.name, item.catalog_name), ("Real Game", "Catalog Name"))
+        self.assertEqual(first=(item.name, item.catalog_name), second=("Real Game", "Catalog Name"))
 
     def test_unknown_title_keeps_the_catalog_name(self) -> None:
         item = self.store._named(items=[mod(name="Catalog Name")])[0]
-        self.assertEqual(item.name, "Catalog Name")
+        self.assertEqual(first=item.name, second="Catalog Name")
 
     def test_refresh_renames_loaded_games(self) -> None:
         self.store.items = [mod(name="Catalog Name")]
 
-        with mock.patch.object(self.store, "title_names", return_value={TITLE: "Real"}):
+        with mock.patch.object(target=self.store, attribute="title_names", return_value={TITLE: "Real"}):
             self.store.refresh_titles()
 
-        self.assertEqual(self.store.items[0].name, "Real")
+        self.assertEqual(first=self.store.items[0].name, second="Real")
 
     def test_destination_still_finds_a_save_under_the_catalog_name(self) -> None:
         self.store.set_download_dir(text=str(self.base / "mine"))
@@ -37,12 +41,12 @@ class NameTests(DownloadCase):
         self.store._commit(entry=item, target=old)
         self.store.titles = {TITLE: "Real Name"}
         named = self.store._named(items=[item])[0]
-        self.assertEqual(self.store.status_of(entry=named), "ok")
+        self.assertEqual(first=self.store.status_of(entry=named), second="ok")
         new = self.store.root / "Real Name - [VI]" / "[miss-unreviewed] [VI].zip"
         new.parent.mkdir(parents=True)
         new.write_bytes(data=b"zip")
         self.store._commit(entry=named, target=new)
-        self.assertFalse(old.parent.exists())
+        self.assertFalse(expr=old.parent.exists())
 
     def test_game_names_lose_special_characters(self) -> None:
         for raw, expected in (
@@ -57,7 +61,7 @@ class NameTests(DownloadCase):
             ("ドラゴンクエスト", "ドラゴンクエスト"),
             ("!!!", "!!!"),
         ):
-            self.assertEqual(names.clean_game_name(name=raw), expected)
+            self.assertEqual(first=names.clean_game_name(name=raw), second=expected)
 
     def test_all_capitals_names_become_title_case(self) -> None:
         for raw, expected in (
@@ -71,7 +75,7 @@ class NameTests(DownloadCase):
             (TITLE, TITLE),
             (f"PACK {TITLE}", f"Pack {TITLE}"),
         ):
-            self.assertEqual(names.clean_game_name(name=raw), expected)
+            self.assertEqual(first=names.clean_game_name(name=raw), second=expected)
 
     def test_finds_a_save_from_before_accents_were_removed(self) -> None:
         self.store.set_download_dir(text=str(self.base / "mine"))
@@ -80,7 +84,7 @@ class NameTests(DownloadCase):
         old.parent.mkdir(parents=True)
         old.write_bytes(data=b"zip")
         self.store._commit(entry=item, target=old)
-        self.assertEqual(self.store.status_of(entry=item), "ok")
+        self.assertEqual(first=self.store.status_of(entry=item), second="ok")
 
     def test_finds_and_replaces_a_save_from_before_names_were_cleaned(self) -> None:
         self.store.set_download_dir(text=str(self.base / "mine"))
@@ -89,32 +93,32 @@ class NameTests(DownloadCase):
         old.parent.mkdir(parents=True)
         old.write_bytes(data=b"zip")
         self.store._commit(entry=item, target=old)
-        self.assertEqual(self.store.status_of(entry=item), "ok")
+        self.assertEqual(first=self.store.status_of(entry=item), second="ok")
         new = self.store.root / names.download_path(name=item.name, version=item.game_version, mod="VI")
         new.parent.mkdir(parents=True)
         new.write_bytes(data=b"zip")
         self.store._commit(entry=item, target=new)
-        self.assertFalse(old.parent.exists())
+        self.assertFalse(expr=old.parent.exists())
 
-    def load_names(self, data: object) -> dict[str, str]:
+    def load_names(self, data: object) -> Dict[str, str]:
         response = mock.MagicMock()
         response.__enter__.return_value.read.return_value = json.dumps(obj=data).encode()
         config = {settings.TITLE_IDS_KEY: "https://x.test/title-ids.json"}
 
         with (
-            mock.patch.object(settings, "load_config", return_value=config),
-            mock.patch.object(net, "http_get", return_value=response),
+            mock.patch.object(target=settings, attribute="load_config", return_value=config),
+            mock.patch.object(target=net, attribute="http_get", return_value=response),
         ):
             return self.store.title_names()
 
     def test_names_come_from_the_games_of_the_title_id_list(self) -> None:
         data = {"games": {TITLE: "Game"}, "system": {"0100000000001000": {"name": "qlaunch", "group": "Applets"}}}
-        self.assertEqual(self.load_names(data=data), {TITLE: "Game"})
+        self.assertEqual(first=self.load_names(data=data), second={TITLE: "Game"})
 
     def test_a_saved_list_names_games_at_once(self) -> None:
         self.load_names(data={"games": {TITLE: "Game"}})
-        self.assertEqual(vault.Vault(base=self.base / "data").titles, {TITLE: "Game"})
+        self.assertEqual(first=vault.Vault(base=self.base / "data").titles, second={TITLE: "Game"})
 
     def test_without_a_list_games_keep_their_catalog_names(self) -> None:
-        with mock.patch.object(settings, "load_config", return_value={}):
-            self.assertEqual(self.store.title_names(), {})
+        with mock.patch.object(target=settings, attribute="load_config", return_value={}):
+            self.assertEqual(first=self.store.title_names(), second={})

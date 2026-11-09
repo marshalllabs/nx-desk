@@ -1,13 +1,11 @@
-from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Optional, Sequence
 
 from PySide6.QtGui import QImage
 
-from ..schemas.artwork import ArtSubject
+from ..schemas.artwork import ArtFiles, ArtSubject
 from ..vault.art_queue import ArtQueue
 from .art import banner_from_files, placeholder_image
-from .cards.thumbs import Files
 
 if TYPE_CHECKING:
     from ..vault import Vault
@@ -21,8 +19,8 @@ class ListArt:
     def __init__(self, vault: "Vault", art_dir: Path, port_cards: bool = False) -> None:
         self.queue = ArtQueue(vault=vault, art_dir=art_dir, port_cards=port_cards)
         self.version = self.queue.version
-        self.banners: dict[str, QImage | None] = {}
-        self.placeholders: dict[str, QImage] = {}
+        self.banners: Dict[str, Optional[QImage]] = {}
+        self.placeholders: Dict[str, QImage] = {}
 
     def needs_key(self) -> bool:
         return self.queue.needs_key()
@@ -31,7 +29,7 @@ class ListArt:
         return self.queue.settled(item=item)
 
     # What the grid's thumbnails ask of the art: the files of an entry, when to start over, who has none.
-    def files_of(self, key: str) -> Files | None:
+    def files_of(self, key: str) -> Optional[ArtFiles]:
         return self.queue.files.get(key)
 
     def version_of(self) -> int:
@@ -56,7 +54,7 @@ class ListArt:
         return self.placeholders[icon_name]
 
     # On the UI thread, because Qt crashed when several threads painted at once.
-    def banner(self, item: ArtSubject) -> QImage | None:
+    def banner(self, item: ArtSubject) -> Optional[QImage]:
         self.queue.check_key()
 
         if self.version != self.queue.version:
@@ -71,7 +69,7 @@ class ListArt:
         if files is None:
             return None
 
-        image = banner_from_files(cover_path=files[0], background_path=files[1])
+        image = banner_from_files(cover_path=files.cover, background_path=files.background)
         self.banners[item.id] = image
 
         while len(self.banners) > KEPT_BANNERS:

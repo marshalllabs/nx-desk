@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Sequence
+from typing import Iterator, List, Sequence
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -34,7 +34,7 @@ def items_of(tree: QTreeWidget) -> Iterator[QTreeWidgetItem]:
         walker += 1
 
 
-def children(item: QTreeWidgetItem) -> list[QTreeWidgetItem]:
+def children(item: QTreeWidgetItem) -> List[QTreeWidgetItem]:
     return [child for index in range(item.childCount()) if (child := item.child(index))]
 
 
@@ -81,6 +81,7 @@ def filter_tree(tree: QTreeWidget, text: str) -> None:
 
         if not shown:
             item.setSelected(False)
+
         elif words and below:
             item.setExpanded(True)
 

@@ -1,9 +1,8 @@
-from typing import TypeVar
+from typing import Dict, List
 
 from ..config import TITLE_ID
+from ..schemas.feeds import TitleFeed, TitleInput
 from ..schemas.title import TitleRow
-
-Row = TypeVar("Row", bound=TitleRow)
 
 
 def game_kind(title: str) -> str:
@@ -13,28 +12,39 @@ def game_kind(title: str) -> str:
 
 
 # The merged list from the nx-index repository: id, name, section and detail for each title.
-def parse_title_ids(data: object) -> list[TitleRow]:
-    rows: list[TitleRow] = []
+def parse_title_ids(data: object) -> List[TitleRow]:
+    rows: List[TitleRow] = []
 
-    if not isinstance(data, dict):
+    try:
+        feed = TitleFeed.model_validate(obj=data)
+
+    except ValueError:
         return rows
 
-    for section in ("games", "system", "sysmodules"):
-        titles = data.get(section)
+    for section, titles in (("games", feed.games), ("system", feed.system), ("sysmodules", feed.sysmodules)):
+        for title, value in titles.items():
+            try:
+                source = (
+                    TitleInput.model_validate(obj=value)
+                    if isinstance(value, dict)
+                    else TitleInput(name=value, group="")
+                )
 
-        for title, value in titles.items() if isinstance(titles, dict) else ():
-            name, detail = (value.get("name"), value.get("group")) if isinstance(value, dict) else (value, "")
+            except ValueError:
+                continue
 
-            if isinstance(title, str) and TITLE_ID.match(string=title) and isinstance(name, str) and name.strip():
-                detail = game_kind(title=title) if section == "games" else str(detail or "Homebrew")
-                rows.append(TitleRow(id=title.upper(), name=name.strip(), section=section, detail=detail))
+            name, detail = source.name, source.group
+
+            if TITLE_ID.match(string=title) and isinstance(name, str) and name.strip():
+                shown = game_kind(title=title) if section == "games" else str(detail or "Homebrew")
+                rows.append(TitleRow(id=title.upper(), name=name.strip(), section=section, detail=shown))
 
     return rows
 
 
 # A full ID also finds its game: updates and DLC share the upper part of an ID whose last 13 bits
 # are zero. System IDs do not follow that rule, so only games count as a match that way.
-def find_titles(rows: list[Row], query: str) -> list[Row]:
+def find_titles[Row: TitleRow](rows: List[Row], query: str) -> List[Row]:
 
     if not query:
         return rows
@@ -51,5 +61,5 @@ def find_titles(rows: list[Row], query: str) -> list[Row]:
 
 
 # Official game names by title ID, from the games section of the list.
-def game_names(rows: list[TitleRow]) -> dict[str, str]:
+def game_names(rows: List[TitleRow]) -> Dict[str, str]:
     return {row.id: row.name for row in rows if row.section == "games"}

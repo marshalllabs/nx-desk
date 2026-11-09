@@ -4,14 +4,14 @@ import shutil
 import tempfile
 import time
 import zipfile
-from collections.abc import Collection
 from pathlib import Path
+from typing import Collection, Counter, Dict, List, Optional
 
 from .. import uploader
-from ..names import format_size
 from ..schemas.common import Progress, Report
 from ..schemas.github import Folder, FolderRef
 from ..utils.callbacks import quiet
+from ..utils.sizes import format_size
 from ..zips import Cancelled
 from .releases import Releases
 
@@ -24,7 +24,7 @@ class Uploads(Releases):
         tag: str,
         stem: str,
         work: Path,
-        report: Report | None = None,
+        report: Optional[Report] = None,
         moved: Progress = quiet,
         zipped: Progress = quiet,
     ) -> None:
@@ -54,14 +54,15 @@ class Uploads(Releases):
                 label=folder.name,
                 moved=moved,
             )
+
         finally:
             shutil.rmtree(path=place, ignore_errors=True)
 
-    def _chosen_stems(self, names: Collection[str]) -> dict[str, Folder]:
+    def _chosen_stems(self, names: Collection[str]) -> Dict[str, Folder]:
         with self.lock:
             chosen = [folder for folder in self.upload_job.folders if folder.name in names]
 
-        stems: dict[str, Folder] = {}
+        stems: Dict[str, Folder] = {}
 
         for folder in chosen:
             stem = uploader.archive.asset_stem(name=folder.name)
@@ -92,6 +93,7 @@ class Uploads(Releases):
             stems = self._chosen_stems(names=names)
 
             uploader.releases.delete_leftovers(repo=repo, tag=tag)
+
         except (uploader.command.GhError, ValueError, OSError) as error:
             with self.lock:
                 alerts = self.upload_job.alerts + 1
@@ -112,8 +114,8 @@ class Uploads(Releases):
         self._log_github(text=f"Uploading {len(stems)} mods to release {tag} of {repo}")
         self.parts.mkdir(exist_ok=True)
         work = Path(tempfile.mkdtemp(prefix="upload-", dir=self.parts))
-        results: collections.Counter[str] = collections.Counter()
-        failed: list[str] = []
+        results: Counter[str] = collections.Counter()
+        failed: List[str] = []
         total = sum(folder.size for folder in stems.values())
         before = 0
 
@@ -124,7 +126,7 @@ class Uploads(Releases):
             # Smallest first, so one huge folder does not hold up all the others.
             order = sorted(stems.items(), key=lambda item: (item[1].size, item[0]))
 
-            for index, (stem, folder) in enumerate(order):
+            for index, (stem, folder) in enumerate(iterable=order):
                 if self.upload_cancel.is_set():
                     break
 
@@ -181,6 +183,7 @@ class Uploads(Releases):
                     try:
                         self._record_in_state(repo=repo, tag=tag, folder_names=[folder.name])
                         recorded = True
+
                     except (uploader.command.GhError, OSError) as error:
                         recorded = False
                         text = f"could not update {uploader.state.STATE_ASSET}, the next upload will: {error}"
@@ -195,12 +198,14 @@ class Uploads(Releases):
 
                         if self._delete_local(folder=folder):
                             results["deleted"] += 1
+
                 except (uploader.command.GhError, OSError, zipfile.BadZipFile) as error:
                     outcome = "error"
                     text = str(error) or type(error).__name__
                     self._mark_folder(name=folder.name, status="error", message=text)
                     failed.append(folder.name)
                     self._log_folder(folder_name=folder.name, text=f"failed: {text}", level="error")
+
                 except Cancelled:
                     self._mark_folder(name=folder.name, status="", message="")
                     self._log_folder(
@@ -213,6 +218,7 @@ class Uploads(Releases):
                 results[outcome] += 1
                 before += folder.size
                 self._mark_folder(name=folder.name, progress="")
+
         finally:
             shutil.rmtree(path=work, ignore_errors=True)
             self._end_meter()
@@ -234,12 +240,14 @@ class Uploads(Releases):
 
         try:
             self._refresh_assets(repo=repo, tag=tag)
+
         except uploader.command.GhError as error:
             message += f" Could not reload the release: {error}"
 
         if results["deleted"]:
             try:
                 self._scan_source()
+
             except (OSError, ValueError) as error:
                 message += f" Could not scan the source folder: {error}"
 

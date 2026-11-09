@@ -1,10 +1,11 @@
-from collections.abc import Collection
+from typing import Collection, List
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QTreeWidgetItem
 
 from ... import uploader
-from ...names import format_size
+from ...schemas.presentation import TableData
+from ...utils.sizes import format_size
 from ...utils.text import plural
 from ..dialogs import ask_yes_no, confirm, confirm_typed
 from ..rows import total_text
@@ -13,7 +14,7 @@ from .selection import Selection
 
 class Transfers(Selection):
     # Each chosen source folder with its size and whether the release has it.
-    def folder_rows(self, names: Collection[str]) -> tuple[list[tuple[str, str, str]], str]:
+    def folder_rows(self, names: Collection[str]) -> TableData:
         job = self.vault.upload_snapshot()
         folders = {folder.name: folder for folder in job.folders}
         assets = {asset.name: asset for asset in job.assets}
@@ -29,10 +30,12 @@ class Transfers(Selection):
 
         total = sum(folders[name].size for name in names if name in folders)
 
-        return rows, total_text(size=total)
+        return TableData(columns=("Folder", "Size", "On the release"), rows=rows, total=total_text(size=total))
 
     def confirm_upload(self, title: str, names: Collection[str]) -> bool:
-        rows, total = self.folder_rows(names=names)
+        table = self.folder_rows(names=names)
+        rows = table.rows
+        total = table.total
         title = self.upload_text(text=title, names=names)
         text = f"{self.upload_text(text='Upload', names=names)} {plural(count=len(names), word='mod')} to release {self.tag}?"
 
@@ -50,7 +53,9 @@ class Transfers(Selection):
 
     def delete_folders(self) -> None:
         names = sorted(self.selected_folders())
-        rows, total = self.folder_rows(names=names)
+        table = self.folder_rows(names=names)
+        rows = table.rows
+        total = table.total
         rows = [(name, size, "Yes" if state == "Replaced" else "No") for name, size, state in rows]
         text = f"This deletes {plural(count=len(names), word='folder')} from the source folder on disk. It cannot be undone."
 
@@ -64,7 +69,7 @@ class Transfers(Selection):
                 word="delete",
                 action="Delete folders",
                 parent=self.app,
-                table=(("Folder", "Size", "On the release"), rows, total),
+                table=TableData(columns=("Folder", "Size", "On the release"), rows=rows, total=total),
             )
         ):
             self.run(self.vault.delete_source_folders, names)
@@ -81,8 +86,8 @@ class Transfers(Selection):
         if self.confirm_upload(title="Upload all", names=names):
             self.run(self.vault.upload_folders, names)
 
-    def confirm_retry(self, title: str, names: list[str]) -> bool:
-        kind, _, tag = self.retry_job
+    def confirm_retry(self, title: str, names: List[str]) -> bool:
+        kind, tag = self.retry_job.kind, self.retry_job.tag
         work = "failed upload" if kind == "upload" else "failed download"
         count = self.retry_count(kind=kind, names=names)
 
@@ -104,7 +109,7 @@ class Transfers(Selection):
             self.run(self.vault.retry_failed, names)
 
     def retry_all(self) -> None:
-        if self.confirm_retry(title="Retry all", names=self.retry_job[1]):
+        if self.confirm_retry(title="Retry all", names=self.retry_job.names):
             self.run(action=self.vault.retry_failed)
 
     # Rows that hold other rows only open and close, as Qt does on a double-click.
@@ -131,10 +136,13 @@ class Transfers(Selection):
         ):
             self.vault.upload_cancel.set()
 
-    def confirm_download(self, title: str, keys: list[str]) -> bool:
+    def confirm_download(self, title: str, keys: List[str]) -> bool:
         title = self.download_text(text=title, keys=keys)
         text = f"{self.download_text(text='Download', keys=keys)} {plural(count=len(keys), word='item')} of release {self.tag} into the source folder?"
-        columns, rows, total = self.asset_rows_for(keys=keys)
+        table = self.asset_rows_for(keys=keys)
+        columns = table.columns
+        rows = table.rows
+        total = table.total
 
         return not self.vault.uploading() and confirm(
             title=title,
@@ -159,7 +167,10 @@ class Transfers(Selection):
         names = self.selected_assets()
         keys = self.chosen_keys()
         text = f"This deletes {plural(count=len(keys), word='game')} from release {self.tag}. It cannot be undone."
-        columns, rows, total = self.asset_rows_for(keys=keys)
+        table = self.asset_rows_for(keys=keys)
+        columns = table.columns
+        rows = table.rows
+        total = table.total
 
         # Typed like the other two deletes, so Enter alone cannot remove files from a release.
         if (
@@ -172,7 +183,7 @@ class Transfers(Selection):
                 word="delete",
                 action="Delete from release",
                 parent=self.app,
-                table=(columns, rows, total),
+                table=TableData(columns=columns, rows=rows, total=total),
             )
         ):
             self.run(self.vault.delete_release_assets, names)

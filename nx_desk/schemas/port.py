@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -20,7 +22,7 @@ class Port(BaseModel):
 
 
 class PortSnapshot(BaseModel):
-    rows: list[Port]
+    rows: List[Port]
     version: int
     loading: bool
     error: str

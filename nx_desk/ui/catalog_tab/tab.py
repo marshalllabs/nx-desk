@@ -1,6 +1,5 @@
 import threading
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 from PySide6.QtCore import (
     QPoint,
@@ -27,13 +26,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...schemas.artwork import ArtFiles, ArtStamp
 from ...schemas.github import UploadSnapshot
+from ...schemas.presentation import DownloadChoice
 from ...schemas.snapshot import ModRow, Snapshot
 from ..cards.grid import CardGrid
 from ..cards.thumbs import CoverThumbs
 from ..icon_set import icon
 from ..repo_picker import show_repo
-from ..rows import Choice, SortState
+from ..rows import SortState
 from ..theme import LIST_COLUMNS, LIST_HIDE_BELOW, LIST_SORTABLE, SPACE, STATUS_FILTERS
 from ..widgets.basics import (
     button,
@@ -63,7 +64,7 @@ if TYPE_CHECKING:
     from ..app import App
 
 # The grid sorts by the columns the list lets a click sort.
-SORTS = tuple((name, title) for name, title, _ in LIST_COLUMNS if name in LIST_SORTABLE)
+SORTS = tuple((column.key, column.title) for column in LIST_COLUMNS if column.key in LIST_SORTABLE)
 
 
 class CatalogTab(Filters, Header, Folders):
@@ -71,38 +72,38 @@ class CatalogTab(Filters, Header, Folders):
         super().__init__()
         self.app = app
         self.vault = app.vault
-        self.items: dict[str, ModRow] = {}
-        self.shown_ids: list[str] | None = None
-        self.selected: str | None = None
-        self.picked: set[str] = set()
+        self.items: Dict[str, ModRow] = {}
+        self.shown_ids: Optional[List[str]] = None
+        self.selected: Optional[str] = None
+        self.picked: Set[str] = set()
         self.list_sort = SortState(column="game")
-        self.chosen: list[str] = []
-        self.missing: list[str] = []
-        self.updates: list[str] = []
-        self.redo_all: list[str] = []
-        self.redo_chosen: list[str] = []
-        self.download_choice: Choice = ("Download all", [])
-        self.redownload_choice: Choice = ("Re-download all", [])
-        self.detail_id: str | None = None
-        self.detail_key: tuple[str, str] | None = None
-        self.art_id: str | None = None
-        self.art_image: QImage | None = None
+        self.chosen: List[str] = []
+        self.missing: List[str] = []
+        self.updates: List[str] = []
+        self.redo_all: List[str] = []
+        self.redo_chosen: List[str] = []
+        self.download_choice: DownloadChoice = DownloadChoice(label="Download all", ids=[])
+        self.redownload_choice: DownloadChoice = DownloadChoice(label="Re-download all", ids=[])
+        self.detail_id: Optional[str] = None
+        self.detail_key: Optional[Tuple[str, str]] = None
+        self.art_id: Optional[str] = None
+        self.art_image: Optional[QImage] = None
         # Banners by (catalog folder, game id); None when the files did not load.
-        self.art_cache: dict[tuple[str, str], QImage | None] = {}
+        self.art_cache: Dict[Tuple[str, str], Optional[QImage]] = {}
         # Art files on disk, filled by the art threads; the UI thread turns them into banners.
-        self.art_files: dict[tuple[str, str], tuple[Path | None, Path | None]] = {}
-        self.art_signature: tuple[object, ...] | None = None
-        self.genres: list[str] = []
-        self.selected_genres: set[str] = set()
-        self.status_filter: set[str] = set()
-        self.downloading: set[str] = set()
+        self.art_files: Dict[Tuple[str, str], ArtFiles] = {}
+        self.art_signature: Optional[ArtStamp] = None
+        self.genres: List[str] = []
+        self.selected_genres: Set[str] = set()
+        self.status_filter: Set[str] = set()
+        self.downloading: Set[str] = set()
         self.reported_batch = 0
         self.catalog_text = ""
         self.active_catalog = self.vault.catalog.folder if self.vault.catalog else None
-        self.shown_auto_repos: int | None = None
+        self.shown_auto_repos: Optional[int] = None
         self.restoring = False
         self.mode = self.vault.catalog_view
-        self.art_threads: list[threading.Thread] = []
+        self.art_threads: List[threading.Thread] = []
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(12)
@@ -254,10 +255,13 @@ class CatalogTab(Filters, Header, Folders):
         header.setHighlightSections(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        for index, (_, _, width) in enumerate(LIST_COLUMNS):
+        for index, spec in enumerate(iterable=LIST_COLUMNS):
+            width = spec.width
+
             if width:
                 header.setSectionResizeMode(index, QHeaderView.ResizeMode.Fixed)
                 header.resizeSection(index, width)
+
             else:
                 header.setSectionResizeMode(index, QHeaderView.ResizeMode.Stretch)
 
@@ -319,7 +323,7 @@ class CatalogTab(Filters, Header, Folders):
         self.status_button = button(text="Status")
         self.status_popup = ChoicePopup(anchor=self.status_button, idle_text="All statuses")
         self.status_popup.set_choices(
-            choices=[(name, text) for name, (text, _) in STATUS_FILTERS.items()],
+            choices=[(name, row.label) for name, row in STATUS_FILTERS.items()],
             picked=set(),
         )
         self.status_popup.toggled.connect(self.toggle_status)
@@ -448,7 +452,8 @@ class CatalogTab(Filters, Header, Folders):
     def fit_columns(self) -> None:
         width = self.table.viewport().width()
 
-        for index, (name, _, _) in enumerate(LIST_COLUMNS):
+        for index, spec in enumerate(iterable=LIST_COLUMNS):
+            name = spec.key
             limit = LIST_HIDE_BELOW.get(name)
             self.table.setColumnHidden(index, limit is not None and width < limit)
 

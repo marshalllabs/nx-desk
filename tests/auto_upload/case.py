@@ -1,15 +1,16 @@
-import json
 import tempfile
 import time
 import unittest
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Dict
 from unittest import mock
 
 from nx_desk import net, uploader, vault
 from nx_desk.schemas.catalog import Catalog, Mod
 from nx_desk.schemas.download import Fetched
+from nx_desk.schemas.state import ReleaseRecord
+from nx_desk.utils.json import parse_json
 from tests.helpers import TITLE, FakeGitHub, mod
 
 
@@ -30,9 +31,9 @@ class AutoUploadCase(unittest.TestCase):
         self.hub.releases = ["reviewed"]
 
         for patcher in (
-            mock.patch.object(uploader.command, "gh", self.hub),
-            mock.patch.object(uploader.upload, "post_asset", self.hub.post),
-            mock.patch.object(net, "http_get"),
+            mock.patch.object(target=uploader.command, attribute="gh", new=self.hub),
+            mock.patch.object(target=uploader.upload, attribute="post_asset", new=self.hub.post),
+            mock.patch.object(target=net, attribute="http_get"),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -45,9 +46,10 @@ class AutoUploadCase(unittest.TestCase):
 
         self.store.items = [item]
         self.store.enqueue(ids=[item.id])
-        _, _, queued, cancel = self.store.queue.get()
+        task = self.store.queue.get()
+        queued, cancel = task.entry, task.cancel
 
-        with mock.patch.object(self.store, "_download", return_value=Fetched(wire=source)):
+        with mock.patch.object(target=self.store, attribute="_download", return_value=Fetched(wire=source)):
             self.store._run_download(entry=queued, cancel=cancel)
             self.store._repack_next()
 
@@ -56,10 +58,10 @@ class AutoUploadCase(unittest.TestCase):
         while self.store.auto_uploading() and time.monotonic() < deadline:
             time.sleep(0.01)
 
-        self.assertFalse(self.store.auto_uploading())
+        self.assertFalse(expr=self.store.auto_uploading())
 
-    def remote_state(self) -> Any:
-        return json.loads(s=self.hub.blobs["state.json"])["mods"]
+    def remote_state(self) -> Dict[str, ReleaseRecord]:
+        return uploader.state.clean_state(data=parse_json(text=self.hub.blobs["state.json"]))
 
     def item(self, sha: str = "a", version: str = "1.0") -> Mod:
         return mod(name="Game", sha256=sha * 64, game_version=version)
@@ -77,9 +79,10 @@ class AutoUploadCase(unittest.TestCase):
 
         self.store.items = [item]
         self.store.enqueue(ids=[item.id])
-        _, _, queued, cancel = self.store.queue.get()
+        task = self.store.queue.get()
+        queued, cancel = task.entry, task.cancel
 
-        with mock.patch.object(self.store, "_download", return_value=Fetched(wire=source)):
+        with mock.patch.object(target=self.store, attribute="_download", return_value=Fetched(wire=source)):
             self.store._run_download(entry=queued, cancel=cancel)
             self.store._repack_next()
 
@@ -89,4 +92,4 @@ class AutoUploadCase(unittest.TestCase):
         while self.store.auto_uploading() and time.monotonic() < deadline:
             time.sleep(0.01)
 
-        self.assertFalse(self.store.auto_uploading())
+        self.assertFalse(expr=self.store.auto_uploading())

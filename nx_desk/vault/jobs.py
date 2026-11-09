@@ -1,4 +1,5 @@
 import threading
+from typing import List
 
 from ..schemas.download import BatchProgress, Job, Outcome
 from .base import VaultBase
@@ -9,7 +10,7 @@ class Jobs(VaultBase):
         with self.lock:
             return any(job.phase != "error" for job in self.jobs.values())
 
-    def snapshot_jobs(self) -> list[Job]:
+    def snapshot_jobs(self) -> List[Job]:
         with self.lock:
             return list(self.jobs.values())
 

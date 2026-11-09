@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter
@@ -12,13 +13,13 @@ SMOOTH = Qt.TransformationMode.SmoothTransformation
 ART_SIZE = (412, 194)
 
 
-def load_image(data: bytes) -> QImage | None:
+def load_image(data: bytes) -> Optional[QImage]:
     image = QImage()
 
     return image.convertToFormat(QImage.Format.Format_RGB32) if image.loadFromData(data) else None
 
 
-def compose_banner(cover: QImage | None, background: QImage | None, size: tuple[int, int]) -> QImage:
+def compose_banner(cover: Optional[QImage], background: Optional[QImage], size: Tuple[int, int]) -> QImage:
     width, height = size
     source = background if background is not None else cover
 
@@ -52,11 +53,12 @@ def compose_banner(cover: QImage | None, background: QImage | None, size: tuple[
 
 
 # A banner from the art files on disk, or None when neither one loads.
-def banner_from_files(cover_path: Path | None, background_path: Path | None) -> QImage | None:
+def banner_from_files(cover_path: Optional[Path], background_path: Optional[Path]) -> Optional[QImage]:
     try:
         cover, background = (
             load_image(data=path.read_bytes()) if path else None for path in (cover_path, background_path)
         )
+
     except OSError:
         return None
 

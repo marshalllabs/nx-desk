@@ -1,8 +1,11 @@
 import re
 from collections import Counter
+from typing import List, Set, Tuple
 
+from ..schemas.feeds import ListFeed, PortInput
 from ..schemas.port import Port
-from .values import as_text, https_or_empty
+from ..utils.urls import https_or_empty
+from .values import as_text
 
 TEXT_LIMIT = 200
 # The marks of the status legend; a variation selector may follow them.
@@ -28,16 +31,25 @@ def text_of(value: object) -> str:
 
 # The list from the gist: {"ports": [...]}. It is untrusted, so each field is cleaned by hand and a
 # row without an id or a name is dropped.
-def parse_ports(data: object) -> list[Port]:
-    raw_rows = data.get("ports") if isinstance(data, dict) else None
-    rows: list[Port] = []
-    seen: set[str] = set()
+def parse_ports(data: object) -> List[Port]:
+    try:
+        feed = ListFeed.model_validate(obj=data)
+
+    except ValueError:
+        return []
+
+    raw_rows = feed.ports
+    rows: List[Port] = []
+    seen: Set[str] = set()
 
     for raw in raw_rows if isinstance(raw_rows, list) else ():
-        if not isinstance(raw, dict):
+        try:
+            source = PortInput.model_validate(obj=raw)
+
+        except ValueError:
             continue
 
-        port_id, name = text_of(value=raw.get("id")), text_of(value=raw.get("name"))
+        port_id, name = text_of(value=source.id), text_of(value=source.name)
 
         if not port_id or not name or port_id in seen:
             continue
@@ -47,15 +59,15 @@ def parse_ports(data: object) -> list[Port]:
             Port(
                 id=port_id,
                 name=name,
-                platform=text_of(value=raw.get("platform")) or "Other",
-                kind="emulator" if text_of(value=raw.get("kind")).lower() == "emulator" else "port",
-                emulates=text_of(value=raw.get("emulates")),
-                version=text_of(value=raw.get("version")),
-                updated=text_of(value=raw.get("updated")),
-                url=https_or_empty(value=raw.get("url")),
-                host=text_of(value=raw.get("host")).lower(),
-                thread=https_or_empty(value=raw.get("thread")),
-                status=text_of(value=raw.get("status")),
+                platform=text_of(value=source.platform) or "Other",
+                kind="emulator" if text_of(value=source.kind).lower() == "emulator" else "port",
+                emulates=text_of(value=source.emulates),
+                version=text_of(value=source.version),
+                updated=text_of(value=source.updated),
+                url=https_or_empty(value=source.url),
+                host=text_of(value=source.host).lower(),
+                thread=https_or_empty(value=source.thread),
+                status=text_of(value=source.status),
             ),
         )
 
@@ -86,7 +98,7 @@ def host_label(host: str) -> str:
 
 
 # Every word of the query must appear somewhere in the row.
-def find_ports(rows: list[Port], query: str) -> list[Port]:
+def find_ports(rows: List[Port], query: str) -> List[Port]:
     words = query.casefold().split()
 
     if not words:
@@ -101,7 +113,7 @@ def find_ports(rows: list[Port], query: str) -> list[Port]:
 
 
 # Platforms by name, each with how many entries it has.
-def platform_counts(rows: list[Port]) -> list[tuple[str, int]]:
+def platform_counts(rows: List[Port]) -> List[Tuple[str, int]]:
     counts = Counter(port.platform for port in rows)
 
     return sorted(counts.items(), key=lambda pair: pair[0].casefold())

@@ -1,6 +1,6 @@
 import functools
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
 from PySide6.QtCore import QItemSelectionModel, QPoint, Qt, QTimer
 from PySide6.QtGui import QAction, QImage, QKeySequence, QShortcut, QShowEvent
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 KINDS = (("", "All"), ("port", "Ports"), ("emulator", "Emulators"))
 VIEWS = (("list", "List"), ("grid", "Grid"))
 # The grid has no column headers, so a menu sorts it by the same columns.
-SORTS = tuple((name, title) for name, title, _ in COLUMNS)
+SORTS = tuple((spec.key, spec.title) for spec in COLUMNS)
 # The pause before the art is asked for, so a burst of changes (typing, scrolling) restarts it once.
 ART_DELAY = 250
 # Rows past the last one in view that go right after it in the order art is fetched.
@@ -56,16 +56,16 @@ class PortsTab(QWidget):
         super().__init__()
         self.app = app
         self.vault = app.vault
-        self.version: int | None = None
-        self.ports: list[Port] = []
+        self.version: Optional[int] = None
+        self.ports: List[Port] = []
         self.kind = ""
-        self.platforms: set[str] = set()
-        self.selected: Port | None = None
+        self.platforms: Set[str] = set()
+        self.selected: Optional[Port] = None
         self.sort = SortState(column="name")
         self.view = self.vault.ports_view
-        self.sort_actions: dict[str, QAction] = {}
-        self.sort_direction_actions: dict[bool, QAction] = {}
-        self.view_actions: dict[str, QAction] = {}
+        self.sort_actions: Dict[str, QAction] = {}
+        self.sort_direction_actions: Dict[bool, QAction] = {}
+        self.view_actions: Dict[str, QAction] = {}
         self.art = ListArt(vault=self.vault, art_dir=self.vault.ports_art_dir, port_cards=True)
         self.art_timer = QTimer(self)
         self.art_timer.setSingleShot(True)
@@ -102,7 +102,7 @@ class PortsTab(QWidget):
         self.platform_button.clicked.connect(self.platform_popup.open)
         top.addWidget(self.platform_button)
         top.addSpacing(10)
-        self.buttons: dict[str, QPushButton] = {}
+        self.buttons: Dict[str, QPushButton] = {}
 
         for kind, _ in KINDS:
             choice = button(text="", action=functools.partial(self.choose_kind, kind))
@@ -161,10 +161,13 @@ class PortsTab(QWidget):
         header.setHighlightSections(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        for index, (_, _, width) in enumerate(COLUMNS):
+        for index, spec in enumerate(iterable=COLUMNS):
+            width = spec.width
+
             if width:
                 header.setSectionResizeMode(index, QHeaderView.ResizeMode.Interactive)
                 header.resizeSection(index, width)
+
             else:
                 header.setSectionResizeMode(index, QHeaderView.ResizeMode.Stretch)
 
@@ -248,7 +251,8 @@ class PortsTab(QWidget):
         width = self.table.viewport().width()
         has_status = any(port.status for port in self.ports)
 
-        for index, (name, _, _) in enumerate(COLUMNS):
+        for index, spec in enumerate(iterable=COLUMNS):
+            name = spec.key
             limit = HIDE_BELOW.get(name)
             hidden = (name == "status" and not has_status) or (limit is not None and width < limit)
             self.table.setColumnHidden(index, hidden)
@@ -264,6 +268,7 @@ class PortsTab(QWidget):
     def toggle_platform(self, platform: str, selected: bool) -> None:
         if selected:
             self.platforms.add(platform)
+
         else:
             self.platforms.discard(platform)
 
@@ -295,7 +300,7 @@ class PortsTab(QWidget):
             self.buttons[kind].setAccessibleName(f"{text} ({count:,})" + (", shown" if chosen else ""))
 
     def sort_by(self, column: int) -> None:
-        self.sort.toggle(column=COLUMNS[column][0])
+        self.sort.toggle(column=COLUMNS[column].key)
         self.fill()
 
     # Filters and sorting rebuild the rows; the chosen entry stays chosen when it is still listed.
@@ -314,10 +319,11 @@ class PortsTab(QWidget):
         keep = self.selected.id if self.selected else None
         self.model.set_rows(rows=found)
         self.model.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(COLUMNS) - 1)
-        row = next((number for number, port in enumerate(found) if port.id == keep), 0)
+        row = next((number for number, port in enumerate(iterable=found) if port.id == keep), 0)
 
         if found:
             self.select_row(row=row)
+
         else:
             self.selected = None
 
@@ -347,7 +353,11 @@ class PortsTab(QWidget):
         self.stack.setCurrentIndex(1 if view == "grid" else 0)
         self.paint_views()
         row = next(
-            (number for number, port in enumerate(self.model.rows) if self.selected and port.id == self.selected.id),
+            (
+                number
+                for number, port in enumerate(iterable=self.model.rows)
+                if self.selected and port.id == self.selected.id
+            ),
             -1,
         )
 
@@ -416,7 +426,7 @@ class PortsTab(QWidget):
         self.art_timer.start()
 
     # The rows in view, and a few more below them.
-    def visible_ports(self) -> list[Port]:
+    def visible_ports(self) -> List[Port]:
         if self.view == "grid":
             start, end = self.grid.shown_rows(total=len(self.model.rows))
 
@@ -472,7 +482,7 @@ class PortsTab(QWidget):
         self.detail.show_port(port=self.selected, banner=self.picture(), needs_key=self.art.needs_key())
 
     # The banner of the chosen entry; an icon once it is known to have none, nothing while it is still looked up.
-    def picture(self) -> QImage | None:
+    def picture(self) -> Optional[QImage]:
         if self.selected is None:
             return None
 
@@ -483,7 +493,7 @@ class PortsTab(QWidget):
 
         return banner
 
-    def chosen(self) -> list[Port]:
+    def chosen(self) -> List[Port]:
         rows = sorted({index.row() for index in self.current_view().selectionModel().selectedIndexes()})
 
         return [self.model.rows[row] for row in rows if row < len(self.model.rows)]

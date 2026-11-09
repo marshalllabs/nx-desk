@@ -1,3 +1,5 @@
+from typing import Dict, List, Optional, Set
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QTreeWidget,
@@ -5,8 +7,9 @@ from PySide6.QtWidgets import (
 )
 
 from ... import uploader
-from ...names import format_size, game_of, shared_games
+from ...names import game_of, shared_games
 from ...schemas.github import Asset, Folder, TreeNode, UploadSnapshot
+from ...utils.sizes import format_size
 from ..rows import UPLOAD_STATUS, WAITING
 from ..theme import COLORS
 from ..widgets.basics import choice
@@ -17,10 +20,10 @@ from .tree_items import ROW_COLORS, filter_tree
 
 
 class Trees(UploadTabState):
-    def count_invalid(self, nodes: list[TreeNode]) -> int:
+    def count_invalid(self, nodes: List[TreeNode]) -> int:
         return sum(node.invalid + self.count_invalid(nodes=node.children) for node in nodes)
 
-    def update_legend(self, job: UploadSnapshot, local_assets: set[str]) -> None:
+    def update_legend(self, job: UploadSnapshot, local_assets: Set[str]) -> None:
         self.source_title.setText(f"Local mods ({len(job.folders)})")
         self.release_title.setText(f"Release mods ({len(self.asset_groups)})")
         uploaded_folders = self.uploaded_folders(job=job)
@@ -34,15 +37,16 @@ class Trees(UploadTabState):
             "orphan": len(self.asset_groups) - local,
         }
 
-        for key, (note, text) in self.legend.items():
+        for key, legend in self.legend.items():
+            note, text = legend.label, legend.text
             note.setText(f"{text} ({counts[key]})")
 
     @staticmethod
-    def opened(rows: dict[str, QTreeWidgetItem]) -> set[str]:
+    def opened(rows: Dict[str, QTreeWidgetItem]) -> Set[str]:
         return {iid for iid, item in rows.items() if item.isExpanded()}
 
     # A game row opens the first time it shows; after that it stays as the user left it.
-    def starts_open(self, iid: str, opened: set[str]) -> bool:
+    def starts_open(self, iid: str, opened: Set[str]) -> bool:
         if iid in self.known_groups:
             return iid in opened
 
@@ -53,8 +57,8 @@ class Trees(UploadTabState):
     @staticmethod
     def place(
         tree: QTreeWidget,
-        rows: dict[str, QTreeWidgetItem],
-        parent: str | None,
+        rows: Dict[str, QTreeWidgetItem],
+        parent: Optional[str],
         item: QTreeWidgetItem,
         iid: str,
     ) -> None:
@@ -63,10 +67,11 @@ class Trees(UploadTabState):
 
         if parent is None:
             tree.addTopLevelItem(item)
+
         else:
             rows[parent].addChild(item)
 
-    def paint_assets(self, job: UploadSnapshot, local_assets: set[str]) -> None:
+    def paint_assets(self, job: UploadSnapshot, local_assets: Set[str]) -> None:
         # Game names come from the local folders, since release file names lose them.
         if (job.asset_list, job.tree) != self.shown_assets:
             self.shown_assets = (job.asset_list, job.tree)
@@ -75,7 +80,7 @@ class Trees(UploadTabState):
             self.assets.setSortingEnabled(False)
             self.assets.clear()
             self.asset_rows = {}
-            groups: dict[str, list[Asset]] = {}
+            groups: Dict[str, List[Asset]] = {}
 
             for asset in job.assets:
                 groups.setdefault(uploader.parts.group_key(name=asset.name), []).append(asset)
@@ -150,10 +155,10 @@ class Trees(UploadTabState):
     # Mod folders of the same game show under one row named after it. Only the view changes.
     def add_nodes(
         self,
-        nodes: list[TreeNode],
-        parent: str | None,
-        opened: set[str],
-        expand: list[QTreeWidgetItem],
+        nodes: List[TreeNode],
+        parent: Optional[str],
+        opened: Set[str],
+        expand: List[QTreeWidgetItem],
     ) -> None:
         leaves = {node.name: game_of(folder=node.name) for node in nodes if node.unit or node.invalid}
         homes = {}
@@ -182,15 +187,17 @@ class Trees(UploadTabState):
             if node.unit:
                 self.unit_of[iid] = node.unit
                 self.unit_iid[node.unit] = iid
+
             elif node.invalid:
                 self.color(item=item, state="invalid", columns=3)
+
             else:
                 self.add_nodes(nodes=node.children, parent=iid, opened=opened, expand=expand)
 
     # Folder and game rows can be closed, so they show what the rows inside them are doing.
     @staticmethod
-    def roll_up(rows: dict[str, QTreeWidgetItem], column: int, active: dict[str, str]) -> None:
-        shown: dict[int, str] = {}
+    def roll_up(rows: Dict[str, QTreeWidgetItem], column: int, active: Dict[str, str]) -> None:
+        shown: Dict[int, str] = {}
 
         # A row at work says more than one still waiting, so it goes first.
         for iid, text in sorted(active.items(), key=lambda pair: pair[1] in WAITING):
@@ -206,7 +213,7 @@ class Trees(UploadTabState):
                 item.setText(column, shown.get(id(item), ""))
 
     @staticmethod
-    def uploaded_folders(job: UploadSnapshot) -> set[str]:
+    def uploaded_folders(job: UploadSnapshot) -> Set[str]:
         assets = {asset.name: asset for asset in job.assets}
 
         return {
@@ -216,13 +223,13 @@ class Trees(UploadTabState):
         }
 
     @staticmethod
-    def unit_state(folder: Folder, uploaded_folders: set[str]) -> str:
+    def unit_state(folder: Folder, uploaded_folders: Set[str]) -> str:
         if folder.status:
             return folder.status
 
         return "uploaded" if folder.name in uploaded_folders else "missing"
 
-    def paint_rows(self, job: UploadSnapshot, uploaded_folders: set[str]) -> None:
+    def paint_rows(self, job: UploadSnapshot, uploaded_folders: Set[str]) -> None:
         if job.tree != self.shown_tree:
             self.shown_tree = job.tree
             opened = self.opened(rows=self.rows)
@@ -232,7 +239,7 @@ class Trees(UploadTabState):
             self.rows = {}
             self.unit_of = {}
             self.unit_iid = {}
-            expand: list[QTreeWidgetItem] = []
+            expand: List[QTreeWidgetItem] = []
             self.add_nodes(nodes=job.tree_nodes, parent=None, opened=opened, expand=expand)
 
             for item in expand:

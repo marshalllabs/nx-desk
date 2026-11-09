@@ -1,9 +1,9 @@
 import json
 import shutil
 import tempfile
-from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Callable, Dict, List, Optional
 
 from pydantic_core import to_jsonable_python
 
@@ -16,15 +16,15 @@ from ..utils.dates import parse_time
 from .logs import Logs
 
 # Changes the mods of state.json, given the release files as they are now.
-StateChange = Callable[[dict[str, ReleaseRecord], dict[str, Asset]], None]
+StateChange = Callable[[Dict[str, ReleaseRecord], Dict[str, Asset]], None]
 
 
 class ReleaseStates(Logs):
-    def linked_catalog(self, tag: str) -> Catalog | None:
+    def linked_catalog(self, tag: str) -> Optional[Catalog]:
         return next((catalog for catalog in self.catalogs if catalog.folder == tag), None)
 
     # Only used when local copies are deleted after upload; otherwise the disk alone decides.
-    def _remote_record(self, entry: Mod) -> ReleaseRecord | None:
+    def _remote_record(self, entry: Mod) -> Optional[ReleaseRecord]:
         cache = self.release_state
 
         if not self.auto_delete or not self.catalog or cache.repo != self.auto_repo:
@@ -38,23 +38,26 @@ class ReleaseStates(Logs):
         # Entries of one file share its upload, which state.json may hold under either.
         return next((mods[other] for other in self._ids_of(entry=entry) if other in mods), None)
 
-    def _read_release_state(self, repo: str, tag: str, assets: dict[str, Asset]) -> ReleaseState:
+    def _read_release_state(self, repo: str, tag: str, assets: Dict[str, Asset]) -> ReleaseState:
         path = self._release_cache(folder=tag)
         cache = self._load_model(path=path, schema=RELEASE_STATE, default=ReleaseState())
         asset = assets.get(uploader.state.STATE_ASSET)
         digest = (asset.digest or "") if asset else ""
-        mods: dict[str, ReleaseRecord]
+        mods: Dict[str, ReleaseRecord]
 
         if not asset:
             mods = {}
+
         elif digest and cache.repo == repo and cache.digest == digest:
             mods = cache.mods
+
         else:
             self.parts.mkdir(exist_ok=True)
             place = Path(tempfile.mkdtemp(prefix="state-", dir=self.parts))
 
             try:
                 mods = uploader.state.read_state(repo=repo, tag=tag, asset=asset, place=place)
+
             finally:
                 shutil.rmtree(path=place, ignore_errors=True)
 
@@ -86,7 +89,7 @@ class ReleaseStates(Logs):
 
     # Reads state.json of the active catalog's release when it changed. A GitHub job holds the
     # lock while it rewrites the file, and keeps the cache current itself, so this then waits.
-    def refresh_release_state(self) -> ReleaseState | None:
+    def refresh_release_state(self) -> Optional[ReleaseState]:
         with self.lock:
             tag = self.catalog.folder if self.catalog else ""
             repo = self.auto_repo
@@ -98,6 +101,7 @@ class ReleaseStates(Logs):
         try:
             try:
                 assets = uploader.releases.remote_assets(repo=repo, tag=tag)
+
             except uploader.command.GhError:
                 if tag in uploader.releases.list_releases(repo=repo):
                     raise
@@ -108,10 +112,12 @@ class ReleaseStates(Logs):
             self._note_release_error(text="")
 
             return data
+
         except (uploader.command.GhError, OSError) as error:
             self._note_release_error(text=str(error) or type(error).__name__)
 
             return None
+
         finally:
             self.github_lock.release()
 
@@ -125,10 +131,10 @@ class ReleaseStates(Logs):
 
     def _state_record(
         self,
-        sha256: str | None,
-        version: str | None,
+        sha256: Optional[str],
+        version: Optional[str],
         folder: str,
-        files: list[str],
+        files: List[str],
         game_version: str = "",
     ) -> ReleaseRecord:
         record: ReleaseRecord = ReleaseRecord(
@@ -141,7 +147,7 @@ class ReleaseStates(Logs):
         if game_version:
             record.game_version = game_version
 
-        record.uploaded_at = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+        record.uploaded_at = datetime.now(tz=UTC).isoformat(timespec="seconds")
 
         return record
 
@@ -152,9 +158,9 @@ class ReleaseStates(Logs):
     def _missing_from_state(
         self,
         tag: str,
-        assets: dict[str, Asset],
-        mods: dict[str, ReleaseRecord],
-    ) -> dict[str, ReleaseRecord]:
+        assets: Dict[str, Asset],
+        mods: Dict[str, ReleaseRecord],
+    ) -> Dict[str, ReleaseRecord]:
         records = self._load_model(
             path=self._catalog_file(folder=tag, name=STATE_FILE),
             schema=DOWNLOAD_RECORDS,
@@ -163,7 +169,7 @@ class ReleaseStates(Logs):
         found = {}
 
         for entry_id, record in records.items():
-            folder = record.file.split("/")[0]
+            folder = record.file.split(sep="/")[0]
 
             if entry_id in mods or not folder:
                 continue
@@ -202,8 +208,12 @@ class ReleaseStates(Logs):
 
         try:
             path = place / uploader.state.STATE_ASSET
-            path.write_text(json.dumps(obj=to_jsonable_python(body), ensure_ascii=False, indent=1), encoding="utf-8")
+            path.write_text(
+                data=json.dumps(obj=to_jsonable_python(body), ensure_ascii=False, indent=1),
+                encoding="utf-8",
+            )
             digest = uploader.state.replace_asset(repo=repo, tag=tag, path=path)
+
         finally:
             shutil.rmtree(path=place, ignore_errors=True)
 

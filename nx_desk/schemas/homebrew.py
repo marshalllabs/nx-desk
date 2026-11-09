@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -5,7 +7,7 @@ class Homebrew(BaseModel):
     id: str
     name: str
     description: str = ""
-    groups: list[str] = []
+    groups: List[str] = []
     category: str = ""
     version: str = ""
     authors: str = ""
@@ -14,7 +16,7 @@ class Homebrew(BaseModel):
 
 
 class HomebrewSnapshot(BaseModel):
-    rows: list[Homebrew]
+    rows: List[Homebrew]
     version: int
     loading: bool
     error: str

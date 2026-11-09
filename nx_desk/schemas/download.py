@@ -72,5 +72,39 @@ class Fetched(BaseModel):
     wire: Path
 
 
-DownloadTask = tuple[int, int, Mod, threading.Event]
-RepackTask = tuple[int, int, Mod, Fetched, Path, threading.Event, float]
+class PriorityTask(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    priority: int
+    order: int
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, PriorityTask):
+            return NotImplemented
+
+        if self.priority != other.priority:
+            return self.priority < other.priority
+
+        return self.order < other.order
+
+
+class DownloadTask(PriorityTask):
+    entry: Mod
+    cancel: threading.Event
+
+
+class RepackTask(DownloadTask):
+    fetched: Fetched
+    target: Path
+    started: float
+
+
+class TransferMark(BaseModel):
+    time: float
+    done: int
+
+
+class FetchProgress(BaseModel):
+    done: int
+    total: int
+    partial: bool

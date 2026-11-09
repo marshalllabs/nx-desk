@@ -1,21 +1,22 @@
 import os
 from pathlib import Path
+from typing import List, Optional, Union
 
 from ..names import display_version, folder_version, game_folder, safe_name, version_label
 from ..schemas.catalog import Mod
 from ..schemas.snapshot import ModRow, Snapshot
-from ..schemas.state import DownloadRecord, ReleaseRecord
+from ..schemas.state import DownloadRecord, EntryStatus, ReleaseRecord
 from .jobs import Jobs
 from .release_state import ReleaseStates
 
 
 class Statuses(Jobs, ReleaseStates):
-    def local_path(self, record: DownloadRecord) -> Path | None:
+    def local_path(self, record: DownloadRecord) -> Optional[Path]:
         path = (self.root / record.file).resolve()
 
         return path if self.root in path.parents else None
 
-    def game_folders(self, entry: Mod) -> list[Path]:
+    def game_folders(self, entry: Mod) -> List[Path]:
         # Older saves may use the catalog's name or keep symbols that names now lose.
         names = {entry.name, (entry.catalog_name or entry.name), (entry.save_name or entry.name)}
         folders = {game_folder(name=name, mod=self.mod_name) for name in names}
@@ -25,44 +26,46 @@ class Statuses(Jobs, ReleaseStates):
 
         try:
             folders |= {name for name in os.listdir(path=self.root) if name.startswith(starts) and name.endswith("]")}
+
         except OSError:
             pass
 
         return [self.root / folder for folder in folders]
 
-    def saved_zips(self, entry: Mod) -> list[Path]:
+    def saved_zips(self, entry: Mod) -> List[Path]:
         zips = []
 
         for folder in self.game_folders(entry=entry):
             try:
                 zips += [path for path in folder.iterdir() if path.suffix.lower() == ".zip" and path.is_file()]
+
             except OSError:
                 pass
 
         return zips
 
     def status_of(self, entry: Mod) -> str:
-        return self._status(entry=entry)[0]
+        return self._status(entry=entry).status
 
     # Local copies decide first. Without one, state.json on the release does when local copies are
     # deleted after upload. The second value says the answer came from the release.
-    def _status(self, entry: Mod) -> tuple[str, ReleaseRecord | None]:
+    def _status(self, entry: Mod) -> EntryStatus:
         zips = self.saved_zips(entry=entry)
 
         if not zips:
             remote = self._remote_record(entry=entry)
 
             if not remote:
-                return "missing", None
+                return EntryStatus(status="missing")
 
             if entry.sha256 and remote.sha256:
-                return ("ok" if remote.sha256 == entry.sha256 else "update"), remote
+                return EntryStatus(status="ok" if remote.sha256 == entry.sha256 else "update", remote=remote)
 
-            return ("ok" if remote.version == entry.version else "update"), remote
+            return EntryStatus(status="ok" if remote.version == entry.version else "update", remote=remote)
 
-        return self._local_status(entry=entry, zips=zips), None
+        return EntryStatus(status=self._local_status(entry=entry, zips=zips))
 
-    def _local_status(self, entry: Mod, zips: list[Path]) -> str:
+    def _local_status(self, entry: Mod, zips: List[Path]) -> str:
         record = self._record_of(entry=entry)
 
         if not record:
@@ -83,7 +86,7 @@ class Statuses(Jobs, ReleaseStates):
 
     # Records from before game versions were stored still name their folder after it.
     @staticmethod
-    def _saved_game_version(record: DownloadRecord | ReleaseRecord) -> str:
+    def _saved_game_version(record: Union[DownloadRecord, ReleaseRecord]) -> str:
         if game_version := record.game_version:
             return game_version
 
@@ -94,15 +97,17 @@ class Statuses(Jobs, ReleaseStates):
 
     def snapshot(self) -> Snapshot:
         with self.lock:
-            items: list[ModRow] = []
+            items: List[ModRow] = []
 
             for entry in self.items:
-                status, remote = self._status(entry=entry)
-                saved: DownloadRecord | ReleaseRecord = remote or self._record_of(entry=entry) or DownloadRecord()
+                matched = self._status(entry=entry)
+                status = matched.status
+                remote = matched.remote
+                saved: Union[DownloadRecord, ReleaseRecord] = remote or self._record_of(entry=entry) or DownloadRecord()
                 # Entries of one file share its download, so each row shows the running job.
                 owner = next((other for other in self._ids_of(entry=entry) if other in self.jobs), entry.id)
                 row = ModRow(
-                    **dict(entry),
+                    **entry.model_dump(),
                     status=status,
                     remote=remote is not None,
                     local_version=saved.version,

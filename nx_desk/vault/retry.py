@@ -1,4 +1,4 @@
-from collections.abc import Collection
+from typing import Collection, Optional
 
 from .asset_downloads import AssetDownloads
 from .uploads import Uploads
@@ -7,7 +7,7 @@ from .uploads import Uploads
 class Retrying(AssetDownloads, Uploads):
     # Runs the last upload or download again for what failed, or for the chosen ones of those, while
     # the same release is chosen.
-    def retry_failed(self, names: Collection[str] | None = None) -> None:
+    def retry_failed(self, names: Optional[Collection[str]] = None) -> None:
         with self.lock:
             job = self.upload_job
             kind, tag = job.retry_kind, job.retry_tag
@@ -20,6 +20,7 @@ class Retrying(AssetDownloads, Uploads):
 
         if kind == "upload":
             self.upload_folders(names=chosen)
+
         elif kind == "download":
             self.download_assets(names=chosen)
 

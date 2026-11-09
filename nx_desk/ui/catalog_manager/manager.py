@@ -1,7 +1,6 @@
 import http.client
 import threading
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -20,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from ...catalog.fields import MAPPABLE_FIELDS
 from ...schemas.catalog import Catalog
+from ...schemas.presentation import CatalogOutcome
 from ..dialogs import ask_yes_no
 from ..style import set_role
 from ..widgets.basics import button, label
@@ -39,11 +39,11 @@ class CatalogManager(QDialog):
         self.app = app
         self.vault = app.vault
         # Set by the job thread: the state, the message and the folder of the edited catalog.
-        self.outcome: tuple[str, str, str | None] | None = None
-        self.shown_folder: str | None = None
+        self.outcome: Optional[CatalogOutcome] = None
+        self.shown_folder: Optional[str] = None
         # The catalogs in the order the table shows them: by name.
-        self.listed: list[Catalog] = []
-        self.format_window: FormatWindow | None = None
+        self.listed: List[Catalog] = []
+        self.format_window: Optional[FormatWindow] = None
         self.setWindowTitle("Manage catalogs")
         # While open, the windows under it take no clicks or keys.
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
@@ -64,10 +64,11 @@ class CatalogManager(QDialog):
         header.setHighlightSections(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        for index, (_, width) in enumerate(self.COLUMNS):
+        for index, (_, width) in enumerate(iterable=self.COLUMNS):
             if width:
                 header.setSectionResizeMode(index, QHeaderView.ResizeMode.Fixed)
                 header.resizeSection(index, width)
+
             else:
                 header.setSectionResizeMode(index, QHeaderView.ResizeMode.Stretch)
 
@@ -89,10 +90,10 @@ class CatalogManager(QDialog):
         fields = QGridLayout()
         fields.setHorizontalSpacing(8)
         fields.setColumnStretch(1, 1)
-        fields.addWidget(label("Name", "muted"), 0, 0)
+        fields.addWidget(label(text="Name", role="muted"), 0, 0)
         self.name = QLineEdit()
         fields.addWidget(self.name, 0, 1)
-        fields.addWidget(label("URL", "muted"), 1, 0)
+        fields.addWidget(label(text="URL", role="muted"), 1, 0)
         self.url = QLineEdit()
         self.url.returnPressed.connect(lambda: self.save() if self.chosen() else self.add())
         fields.addWidget(self.url, 1, 1)
@@ -120,13 +121,13 @@ class CatalogManager(QDialog):
         )
         hint.setWordWrap(True)
         grid.addWidget(hint, 0, 0, 1, 4)
-        self.fields: dict[str, QLineEdit] = {}
+        self.fields: Dict[str, QLineEdit] = {}
 
-        for index, (field, text) in enumerate(MAPPABLE_FIELDS):
+        for index, (field, text) in enumerate(iterable=MAPPABLE_FIELDS):
             entry = QLineEdit()
             self.fields[field] = entry
             row, column = 1 + index // 2, (index % 2) * 2
-            grid.addWidget(label(text, "muted"), row, column)
+            grid.addWidget(label(text=text, role="muted"), row, column)
             grid.addWidget(entry, row, column + 1)
 
         self.panel.hide()
@@ -164,7 +165,7 @@ class CatalogManager(QDialog):
         self.panel.setVisible(shown)
         self.fit()
 
-    def current_mapping(self) -> dict[str, str]:
+    def current_mapping(self) -> Dict[str, str]:
         return {field: entry.text() for field, entry in self.fields.items() if entry.text().strip()}
 
     # Shows the list again each time the window opens, with the catalog in use chosen.
@@ -175,6 +176,7 @@ class CatalogManager(QDialog):
 
         if active in folders:
             self.table.selectRow(folders.index(active))
+
         else:
             self.clear()
 
@@ -190,7 +192,7 @@ class CatalogManager(QDialog):
         self.table.blockSignals(True)
         self.table.setRowCount(len(catalogs))
 
-        for row, catalog in enumerate(catalogs):
+        for row, catalog in enumerate(iterable=catalogs):
             values = (
                 catalog.name,
                 catalog.folder,
@@ -198,7 +200,7 @@ class CatalogManager(QDialog):
                 "Custom" if catalog.mapping else "Auto",
             )
 
-            for column, value in enumerate(values):
+            for column, value in enumerate(iterable=values):
                 self.table.setItem(row, column, QTableWidgetItem(value))
 
         self.table.blockSignals(False)
@@ -210,7 +212,7 @@ class CatalogManager(QDialog):
         self.paint_buttons()
         self.fit()
 
-    def chosen(self) -> Catalog | None:
+    def chosen(self) -> Optional[Catalog]:
         rows = self.table.selectionModel().selectedRows()
         index = rows[0].row() if rows else -1
 
@@ -268,7 +270,7 @@ class CatalogManager(QDialog):
             widget.setEnabled(False)
 
         set_role(widget=self.status, role="muted")
-        self.spinner.start(message)
+        self.spinner.start(text=message)
         threading.Thread(target=job, daemon=True).start()
         self.timer.start()
 
@@ -277,10 +279,14 @@ class CatalogManager(QDialog):
 
         def job() -> None:
             try:
-                catalog = self.vault.add_catalog(name, url, mapping)
-                self.outcome = ("ok", f"Added {catalog.name} ({len(self.vault.items)} games).", None)
+                catalog = self.vault.add_catalog(name=name, url=url, mapping=mapping)
+                self.outcome = CatalogOutcome(
+                    state="ok",
+                    message=f"Added {catalog.name} ({len(self.vault.items)} games).",
+                )
+
             except (OSError, ValueError, http.client.HTTPException) as error:
-                self.outcome = ("error", str(error) or type(error).__name__, None)
+                self.outcome = CatalogOutcome(state="error", message=str(error) or type(error).__name__)
 
         self.run(job=job, message="Reading catalog…")
 
@@ -294,12 +300,13 @@ class CatalogManager(QDialog):
 
         def job() -> None:
             try:
-                edit = self.vault.edit_catalog(folder, name, url, mapping)
+                edit = self.vault.edit_catalog(folder=folder, name=name, url=url, mapping=mapping)
                 message = " ".join([f"Saved {edit.catalog.name} ({edit.count} games).", *edit.notes])
                 # The folder may have followed a new name, so the list picks the catalog by its folder now.
-                self.outcome = ("ok", message, edit.catalog.folder)
+                self.outcome = CatalogOutcome(state="ok", message=message, edited=edit.catalog.folder)
+
             except (OSError, ValueError, http.client.HTTPException) as error:
-                self.outcome = ("error", str(error) or type(error).__name__, folder)
+                self.outcome = CatalogOutcome(state="error", message=str(error) or type(error).__name__, edited=folder)
 
         self.run(job=job, message="Reading catalog…")
 
@@ -308,7 +315,7 @@ class CatalogManager(QDialog):
             return
 
         self.timer.stop()
-        state, message, edited = self.outcome
+        state, message, edited = self.outcome.state, self.outcome.message, self.outcome.edited
         self.outcome = None
         self.spinner.stop()
 
@@ -329,6 +336,7 @@ class CatalogManager(QDialog):
 
             self.paint_buttons()
             self.app.catalog.detail_key = None
+
         elif state == "ok":
             self.name.clear()
             self.url.clear()
@@ -364,6 +372,6 @@ class CatalogManager(QDialog):
             action="Remove",
             danger=True,
         ):
-            self.vault.remove_catalog(catalog.folder)
+            self.vault.remove_catalog(folder=catalog.folder)
             self.fill_list()
             self.clear()

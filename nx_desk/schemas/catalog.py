@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Dict, List, Literal
 
 from pydantic import BaseModel
 
@@ -21,29 +21,29 @@ class Mod(BaseModel):
     developer: str
     release: str
     translator: str
-    tags: list[str]
-    description: list[str]
-    highlights: list[Highlight]
-    done: list[str]
-    kept: list[str]
+    tags: List[str]
+    description: List[str]
+    highlights: List[Highlight]
+    done: List[str]
+    kept: List[str]
     changelog: str
     credit: str
     cover: str
     background: str
     sha256: str
     size: int
-    urls: list[str]
+    urls: List[str]
     # The catalog's own name, kept when the titledb name replaces it; empty until then.
     catalog_name: str = ""
     # The name its saved folder takes, shared by every entry of the same file; empty until named.
     save_name: str = ""
     # Other entries of the catalog with the same file, which share its download.
-    twins: list[str] = []
+    twins: List[str] = []
 
 
 # A parsed catalog: its games.
 class CatalogDocument(BaseModel):
-    items: list[Mod]
+    items: List[Mod]
 
 
 # A catalog in the registry.
@@ -52,11 +52,26 @@ class Catalog(BaseModel):
     url: str
     folder: str
     # Canonical field -> the catalog's own key, for catalogs with unusual names.
-    mapping: dict[str, str] = {}
+    mapping: Dict[str, str] = {}
 
 
 # What editing a catalog did: the catalog, how many games it holds and what else changed, such as its release.
 class CatalogEdit(BaseModel):
     catalog: Catalog
     count: int
-    notes: list[str] = []
+    notes: List[str] = []
+
+
+class CatalogFetch(BaseModel):
+    raw: bytes
+    document: CatalogDocument
+
+
+class CatalogChanges(BaseModel):
+    added: List[str]
+    changed: List[str]
+
+
+class CatalogSource(BaseModel):
+    url: str
+    mapping: Dict[str, str]

@@ -1,5 +1,4 @@
-from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
@@ -18,7 +17,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...schemas.github import RetryState
+from ...schemas.presentation import CompareStamp, UploadPaintStamp
 from ..icon_set import icon
+from ..layout_models import LegendNote, PanelHeader
 from ..repo_picker import pick_repo, show_repo
 from ..theme import COLORS, SPACE
 from ..widgets.basics import button, clear_on_escape, fill_choices, focus_box, label, menu_button, tool
@@ -39,31 +41,31 @@ class UploadTab(Transfers, Painting):
         self.app = app
         self.vault = app.vault
         # What each part of the tab last painted, so a repaint only touches what changed.
-        self.painted: tuple[object, ...] | None = None
-        self.shown_tree: int | None = None
-        self.shown_releases: int | None = None
-        self.shown_repos: int | None = None
-        self.shown_assets: tuple[int, int] | None = None
-        self.shown_source: int | None = None
+        self.painted: Optional[UploadPaintStamp] = None
+        self.shown_tree: Optional[int] = None
+        self.shown_releases: Optional[int] = None
+        self.shown_repos: Optional[int] = None
+        self.shown_assets: Optional[Tuple[int, int]] = None
+        self.shown_source: Optional[int] = None
         self.reported_runs = 0
         self.reported_alerts = 0
         # Release file group -> the file names in it.
-        self.asset_groups: dict[str, list[str]] = {}
-        self.known_releases: list[str] = []
-        self.legend: dict[str, tuple[QLabel, str]] = {}
+        self.asset_groups: Dict[str, List[str]] = {}
+        self.known_releases: List[str] = []
+        self.legend: Dict[str, LegendNote] = {}
         # Tree row id -> mod folder name, and back.
-        self.unit_of: dict[str, str] = {}
-        self.unit_iid: dict[str, str] = {}
-        self.rows: dict[str, QTreeWidgetItem] = {}
-        self.asset_rows: dict[str, QTreeWidgetItem] = {}
-        self.asset_sizes: dict[str, int] = {}
-        self.asset_updated: dict[str, str] = {}
-        self.known_groups: set[str] = set()
-        self.retry_job: tuple[str, list[str], str] = ("", [], "")
-        self.shown_compare: tuple[int, int, str] | None = None
-        self.compare_titles: list[QLabel] = []
-        self.compare_notes: list[dict[str, QLabel]] = []
-        self.compare_trees: list[QTreeWidget] = []
+        self.unit_of: Dict[str, str] = {}
+        self.unit_iid: Dict[str, str] = {}
+        self.rows: Dict[str, QTreeWidgetItem] = {}
+        self.asset_rows: Dict[str, QTreeWidgetItem] = {}
+        self.asset_sizes: Dict[str, int] = {}
+        self.asset_updated: Dict[str, str] = {}
+        self.known_groups: Set[str] = set()
+        self.retry_job: RetryState = RetryState()
+        self.shown_compare: Optional[CompareStamp] = None
+        self.compare_titles: List[QLabel] = []
+        self.compare_notes: List[Dict[str, QLabel]] = []
+        self.compare_trees: List[QTreeWidget] = []
         self.repo = self.vault.upload_repo
         self.latest_release = ""
         self.compared = ""
@@ -273,7 +275,7 @@ class UploadTab(Transfers, Painting):
         )
         self.delete_source_button = tool(action=self.delete_folders_action, role="danger")
         self.source_title = label(text="Local mods (0)", role="name")
-        source_head, source_notes = self.panel_title(
+        panel = self.panel_title(
             title=self.source_title,
             tools=(self.scan_button, self.upload_button, self.delete_source_button),
             legend=(
@@ -282,17 +284,21 @@ class UploadTab(Transfers, Painting):
                 ("invalid", "Invalid", "bad"),
             ),
         )
+        source_head = panel.head
+        source_notes = panel.notes
         grid.addLayout(source_head, 0, 0)
         self.refresh_button = tool(action=self.refresh_action)
         # The primary action of the release panel, styled like Upload and the Catalog tab's Download.
         self.download_button = tool(action=self.download_action, role="accent", menu=(self.download_all_action,))
         self.delete_button = tool(action=self.delete_assets_action, role="danger")
         self.release_title = label(text="Release mods (0)", role="name")
-        release_head, release_notes = self.panel_title(
+        panel = self.panel_title(
             title=self.release_title,
             tools=(self.refresh_button, self.download_button, self.delete_button),
             legend=(("local", "Downloaded", "ok"), ("orphan", "Not downloaded", "miss")),
         )
+        release_head = panel.head
+        release_notes = panel.notes
         grid.addLayout(release_head, 0, 1)
         self.tree = make_tree(titles=("Folder", "Size", "Status"))
         self.assets = make_tree(titles=("File", "Size", "Updated", "Status"))
@@ -357,8 +363,8 @@ class UploadTab(Transfers, Painting):
         self,
         title: QLabel,
         tools: Iterable[QWidget],
-        legend: Iterable[tuple[str, str, str]],
-    ) -> tuple[QHBoxLayout, QHBoxLayout]:
+        legend: Iterable[Tuple[str, str, str]],
+    ) -> PanelHeader:
         head = QHBoxLayout()
         head.setSpacing(SPACE["sm"])
         head.addWidget(title)
@@ -375,9 +381,9 @@ class UploadTab(Transfers, Painting):
             note = label(text=text)
             note.setStyleSheet(f"color: {COLORS[color]};")
             notes.addWidget(note)
-            self.legend[key] = (note, text)
+            self.legend[key] = LegendNote(label=note, text=text)
 
-        return head, notes
+        return PanelHeader(head=head, notes=notes)
 
     # Ctrl+F goes to the release files' search when that panel has focus, else to the folders'.
     def focus_search(self) -> None:

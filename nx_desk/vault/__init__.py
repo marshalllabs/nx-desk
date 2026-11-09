@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Union
 
 from .app_update import AppUpdates
 from .artwork import Artwork
@@ -14,6 +15,6 @@ from .titles import Titles
 
 # All state and logic. Each mixin covers one area, in the file named after it.
 class Vault(DownloadQueue, Retrying, Comparing, Catalogs, Options, AppUpdates, Homebrews, Titles, Ports, Artwork):
-    def __init__(self, base: Path | str) -> None:
+    def __init__(self, base: Union[Path, str]) -> None:
         super().__init__(base=base)
         self._prune_logs()

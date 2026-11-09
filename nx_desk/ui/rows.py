@@ -1,9 +1,11 @@
-from collections.abc import Iterable, Sequence
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 from ..config import MISSING_VERSION
-from ..names import display_version, format_size
+from ..names import display_version
 from ..schemas.github import CompareRow
+from ..schemas.presentation import DownloadChoice, DownloadChoices, TableData, VersionCells
 from ..schemas.snapshot import ModRow
+from ..utils.sizes import format_size
 
 # Parts of the UI that need no toolkit, so the tests can reach them.
 
@@ -83,39 +85,47 @@ def changed(old: str, new: str) -> str:
     return f"{old} → {new}" if old and old != new else new
 
 
-def version_cells(item: ModRow) -> tuple[str, str]:
+def version_cells(item: ModRow) -> VersionCells:
     mod = item.version or "-"
     game = display_version(game_version=item.game_version)
     shown_game = "Miss" if game == MISSING_VERSION else game
 
     if item.status != "update" or item.job:
-        return mod, shown_game
+        return VersionCells(mod=mod, game=shown_game)
 
     old_game = display_version(game_version=item.local_game_version)
     old_game = "" if old_game == MISSING_VERSION else old_game
 
-    return changed(old=item.local_version, new=mod), changed(old=old_game, new=shown_game)
+    return VersionCells(mod=changed(old=item.local_version, new=mod), game=changed(old=old_game, new=shown_game))
 
 
 def update_text(item: ModRow) -> str:
-    mod, game = version_cells(item=item)
+    versions = version_cells(item=item)
+    mod = versions.mod
+    game = versions.game
     parts = [f"mod {mod}" if "→" in mod else "", f"game {game}" if "→" in game else ""]
     found = ", ".join(part for part in parts if part)
 
     return f"Update available: {found}" if found else "Update available"
 
 
-MOD_COLUMNS: tuple[str, ...] = ("Game", "Mod version", "Game version", "Size")
+MOD_COLUMNS: Tuple[str, ...] = ("Game", "Mod version", "Game version", "Size")
 
 
 # The rows a download or update question lists; an update shows old → new versions.
-def mod_rows(items: Iterable[ModRow]) -> tuple[tuple[str, ...], list[tuple[str, ...]], str]:
-    rows: list[tuple[str, ...]] = [
-        (item.name, *version_cells(item=item), format_size(value=item.size) if item.size else "-") for item in items
+def mod_rows(items: Iterable[ModRow]) -> TableData:
+    rows: List[Tuple[str, ...]] = [
+        (
+            item.name,
+            version_cells(item=item).mod,
+            version_cells(item=item).game,
+            format_size(value=item.size) if item.size else "-",
+        )
+        for item in items
     ]
     total = sum(item.size or 0 for item in items)
 
-    return MOD_COLUMNS, rows, total_text(size=total)
+    return TableData(columns=MOD_COLUMNS, rows=rows, total=total_text(size=total))
 
 
 def total_text(size: int) -> str:
@@ -153,21 +163,21 @@ def picked_text(title: str, picked: Sequence[str]) -> str:
 
 
 def format_time(seconds: float) -> str:
-    minutes, rest = divmod(round(seconds), 60)
+    minutes, rest = divmod(round(number=seconds), 60)
     hours, minutes = divmod(minutes, 60)
 
     return f"{hours}h {minutes}m" if hours else f"{minutes}m {rest}s" if minutes else f"{rest}s"
 
 
 # Repositories show by name alone, unless two owners have one of the same name.
-def repo_labels(repos: Iterable[str]) -> dict[str, str]:
+def repo_labels(repos: Iterable[str]) -> Dict[str, str]:
     repos = list(repos)
-    names = [repo.split("/", 1)[-1] for repo in repos]
+    names = [repo.split(sep="/", maxsplit=1)[-1] for repo in repos]
 
     return {repo: name for repo, name in zip(repos, names, strict=True) if names.count(name) == 1}
 
 
-def release_labels(latest: str) -> dict[str, str]:
+def release_labels(latest: str) -> Dict[str, str]:
     return {latest: f"{latest}  (latest)"} if latest else {}
 
 
@@ -194,23 +204,26 @@ UPLOAD_STATUS = {
 }
 
 
-Choice = tuple[str, list[str]]
-
-
 # The Catalog tab's two download buttons, each a label and the mods it takes. While no game or just one is picked
 # they take the whole catalog ("Download all" the new mods, "Re-download all" the downloaded ones); with several
 # picked they take those ("... selected").
 def download_scopes(
     picked: int,
-    new: list[str],
-    done: list[str],
-    picked_new: list[str],
-    picked_done: list[str],
-) -> tuple[Choice, Choice]:
+    new: List[str],
+    done: List[str],
+    picked_new: List[str],
+    picked_done: List[str],
+) -> DownloadChoices:
     if picked > 1:
-        return ("Download selected", picked_new), ("Re-download selected", picked_done)
+        return DownloadChoices(
+            download=DownloadChoice(label="Download selected", ids=picked_new),
+            redownload=DownloadChoice(label="Re-download selected", ids=picked_done),
+        )
 
-    return ("Download all", new), ("Re-download all", done)
+    return DownloadChoices(
+        download=DownloadChoice(label="Download all", ids=new),
+        redownload=DownloadChoice(label="Re-download all", ids=done),
+    )
 
 
 # One label for every transfer button in both tabs: "Download (4 · 120 MiB)". A part that is 0 is left out.

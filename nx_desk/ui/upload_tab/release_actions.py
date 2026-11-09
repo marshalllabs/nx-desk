@@ -1,5 +1,5 @@
 import threading
-from collections.abc import Callable
+from typing import Callable
 
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -59,6 +59,7 @@ class ReleaseActions(UploadTabState):
 
         if name in self.known_releases:
             show_message(title="Create release", message=f"Release {name} already exists.", parent=self.app)
+
         else:
             self.run(self.vault.create_upload_release, name)
 

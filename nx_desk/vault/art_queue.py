@@ -1,31 +1,39 @@
 import threading
-from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Dict, List, Optional, Protocol, Sequence, Set
 
 from ..catalog.ports import card_url
 from ..config import ART_WORKERS
-from ..schemas.artwork import ArtSubject
+from ..schemas.artwork import ArtFiles, ArtSources, ArtSubject
+from ..schemas.catalog import ArtKind
 from ..schemas.port import Port
 
-if TYPE_CHECKING:
-    from . import Vault
+
+class ArtProvider(Protocol):
+    art_version: int
+    ports_art_dir: Path
+
+    def has_art_key(self) -> bool: ...
+
+    def steamgrid_art(self, item: ArtSubject) -> Optional[ArtSources]: ...
+
+    def fetch_art(self, item: ArtSubject, kind: ArtKind, url: str, art_dir: Path) -> Optional[Path]: ...
 
 
 # Fetches the art of the entries a tab asks for, from SteamGridDB only, with no toolkit: the tab names the
 # entries it wants, the chosen one first, and a few threads take them in order. A new list of wanted
 # entries drops those still waiting, so a list of hundreds does not spend the key's rate limit at once.
 class ArtQueue:
-    def __init__(self, vault: "Vault", art_dir: Path | None = None, port_cards: bool = True) -> None:
+    def __init__(self, vault: ArtProvider, art_dir: Optional[Path] = None, port_cards: bool = True) -> None:
         self.vault = vault
         self.art_dir = art_dir if art_dir is not None else vault.ports_art_dir
         self.port_cards = port_cards
         self.version = vault.art_version
         self.lock = threading.Lock()
         # Art files by entry id, filled by the art threads.
-        self.files: dict[str, tuple[Path | None, Path | None]] = {}
-        self.asked: set[str] = set()
-        self.waiting: list[ArtSubject] = []
+        self.files: Dict[str, ArtFiles] = {}
+        self.asked: Set[str] = set()
+        self.waiting: List[ArtSubject] = []
         self.workers = 0
 
     def needs_key(self) -> bool:
@@ -84,12 +92,12 @@ class ArtQueue:
             return
 
         art_dir = self.art_dir
-        cover = self.vault.fetch_art(item=item, kind="cover", url=urls[0], art_dir=art_dir)
-        background = self.vault.fetch_art(item=item, kind="background", url=urls[1], art_dir=art_dir)
+        cover = self.vault.fetch_art(item=item, kind="cover", url=urls.cover, art_dir=art_dir)
+        background = self.vault.fetch_art(item=item, kind="background", url=urls.background, art_dir=art_dir)
 
         # SteamGridDB knew nothing of it, so a GitHub repository gets the card GitHub draws for it.
-        if not urls[0] and not urls[1] and self.port_cards and isinstance(item, Port):
+        if not urls.cover and not urls.background and self.port_cards and isinstance(item, Port):
             background = self.vault.fetch_art(item=item, kind="background", url=card_url(port=item), art_dir=art_dir)
 
         if version == self.version:
-            self.files[item.id] = (cover, background)
+            self.files[item.id] = ArtFiles(cover=cover, background=background)

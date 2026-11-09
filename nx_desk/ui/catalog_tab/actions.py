@@ -1,5 +1,5 @@
 import threading
-from collections.abc import Iterable
+from typing import Iterable, List
 
 from ...utils.text import again, plural
 from ..dialogs import ask_yes_no, confirm, show_message
@@ -39,6 +39,7 @@ class Actions(CatalogTabState):
                 keep="Keep downloading",
             ):
                 self.vault.cancel(entry_id=item.id)
+
         elif self.has_mod_name() and self.confirm_download(
             title=again(text="Download", done=item.status == "ok"),
             question=again(text="Download this mod?", done=item.status == "ok"),
@@ -52,7 +53,10 @@ class Actions(CatalogTabState):
             (self.items[entry_id] for entry_id in ids if entry_id in self.items),
             key=lambda item: item.name.lower(),
         )
-        columns, rows, total = mod_rows(items=items)
+        table = mod_rows(items=items)
+        columns = table.columns
+        rows = table.rows
+        total = table.total
 
         return confirm(
             title=title,
@@ -70,20 +74,21 @@ class Actions(CatalogTabState):
             self.vault.enqueue(ids=ids)
 
     def get_download(self) -> None:
-        self.start_download(label=self.download_choice[0], ids=list(self.download_choice[1]))
+        self.start_download(label=self.download_choice.label, ids=list(self.download_choice.ids))
 
     def get_redownload(self) -> None:
-        self.start_download(label=self.redownload_choice[0], ids=list(self.redownload_choice[1]))
+        self.start_download(label=self.redownload_choice.label, ids=list(self.redownload_choice.ids))
 
     # Enter on several picked rows: the new ones, or when none is new, the downloaded ones again.
     def get_chosen(self) -> None:
         if self.chosen:
             self.start_download(label="Download selected", ids=list(self.chosen))
+
         elif self.redo_chosen:
             self.start_download(label="Re-download selected", ids=list(self.redo_chosen))
 
-    def start_download(self, label: str, ids: list[str]) -> None:
-        verb = label.split(" ")[0]
+    def start_download(self, label: str, ids: List[str]) -> None:
+        verb = label.split(sep=" ")[0]
 
         if ids and self.has_mod_name() and self.confirm_download(title=label, question=verb + " {count}?", ids=ids):
             self.vault.enqueue(ids=ids)

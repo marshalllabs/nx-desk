@@ -1,4 +1,4 @@
-from collections.abc import Collection, Iterable
+from typing import Collection, Iterable, Tuple
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
@@ -90,7 +90,7 @@ class ChoicePopup(QFrame):
         item.setCheckState(state)
 
     # Each choice is a (key, text) pair; signals carry the key.
-    def set_choices(self, choices: Iterable[tuple[str, str]], picked: Collection[str]) -> None:
+    def set_choices(self, choices: Iterable[Tuple[str, str]], picked: Collection[str]) -> None:
         self.choices.blockSignals(True)
         self.choices.clear()
 

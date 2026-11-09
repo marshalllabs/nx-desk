@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 from pydantic import BaseModel
 
 from .catalog import Catalog, Mod
@@ -12,18 +14,18 @@ class ModRow(Mod):
     remote: bool
     local_version: str
     local_game_version: str
-    job: Job | None
+    job: Optional[Job]
 
 
 class Snapshot(BaseModel):
-    items: list[ModRow]
-    checked_at: float | None
+    items: List[ModRow]
+    checked_at: Optional[float]
     checking: bool
-    error: str | None
+    error: Optional[str]
     dir: str
-    catalogs: list[Catalog]
-    active: str | None
-    app_update: AppUpdate | None
-    app_update_job: UpdateJob | None
-    log: list[LogEntry]
+    catalogs: List[Catalog]
+    active: Optional[str]
+    app_update: Optional[AppUpdate]
+    app_update_job: Optional[UpdateJob]
+    log: List[LogEntry]
     batch: BatchProgress

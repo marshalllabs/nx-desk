@@ -1,12 +1,14 @@
 import http.client
-import json
 import time
 import urllib.error
-from collections.abc import Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote, urlencode, urlsplit
+
+from pydantic import JsonValue
 
 from . import net
 from .config import ART_LOOKUP_RULES
+from .schemas.api import SteamGame, SteamImage, SteamReply
 from .schemas.artwork import ArtLookup
 from .utils.http_headers import retry_after
 from .utils.text import likeness
@@ -16,12 +18,12 @@ REPLY_LIMIT = 1024 * 1024
 # A search hit counts only when its name is this alike to the one asked for; the first hit is not enough.
 MIN_LIKENESS = 0.6
 # Cover art tried first: the tall box art the banner draws beside the background.
-GRID_FILTERS: tuple[dict[str, str], ...] = (
+GRID_FILTERS: Tuple[Dict[str, str], ...] = (
     {"dimensions": "600x900", "types": "static", "nsfw": "false", "humor": "false"},
     {"types": "static", "nsfw": "false", "humor": "false"},
     {},
 )
-HERO_FILTERS: tuple[dict[str, str], ...] = (
+HERO_FILTERS: Tuple[Dict[str, str], ...] = (
     {"types": "static", "nsfw": "false", "humor": "false"},
     {},
 )
@@ -49,12 +51,13 @@ class RateLimited(ArtworkError):
 
 
 # Replies are untrusted: anything but {"success": true, "data": [...]} counts as no data.
-def get_data(path: str, key: str, query: dict[str, str]) -> list[object] | None:
+def get_data(path: str, key: str, query: Dict[str, str]) -> Optional[List[JsonValue]]:
     url = f"{API}{path}" + (f"?{urlencode(query=query)}" if query else "")
 
     try:
         with net.http_get(url=url, headers={"Authorization": f"Bearer {key}"}) as response:
             raw = response.read(REPLY_LIMIT + 1)
+
     except urllib.error.HTTPError as error:
         code = error.code
         wait = retry_after(value=error.headers.get("Retry-After")) or 60
@@ -71,6 +74,7 @@ def get_data(path: str, key: str, query: dict[str, str]) -> list[object] | None:
             return None
 
         raise ArtworkError(f"SteamGridDB answered HTTP {code}") from None
+
     except (OSError, http.client.HTTPException) as error:
         raise ArtworkError(str(error) or type(error).__name__) from None
 
@@ -78,14 +82,15 @@ def get_data(path: str, key: str, query: dict[str, str]) -> list[object] | None:
         return None
 
     try:
-        reply = json.loads(s=raw)
+        reply = SteamReply.model_validate_json(json_data=raw)
+
     except ValueError:
         return None
 
-    if not isinstance(reply, dict) or reply.get("success") is not True:
+    if not reply.success:
         return None
 
-    data = reply.get("data")
+    data = reply.data
 
     return data if isinstance(data, list) else None
 
@@ -94,16 +99,14 @@ def get_data(path: str, key: str, query: dict[str, str]) -> list[object] | None:
 def search_game(name: str, key: str) -> int:
     best, best_score = 0, 0.0
 
-    for found in get_data(path=f"/search/autocomplete/{quote(name, safe='')}", key=key, query={}) or []:
-        if not isinstance(found, dict):
+    for found in get_data(path=f"/search/autocomplete/{quote(string=name, safe='')}", key=key, query={}) or []:
+        try:
+            game = SteamGame.model_validate(obj=found)
+
+        except ValueError:
             continue
 
-        game_id = found.get("id")
-
-        if not isinstance(game_id, int) or isinstance(game_id, bool) or game_id <= 0:
-            continue
-
-        title = found.get("name")
+        game_id, title = game.id, game.name
         score = likeness(left=name, right=title) if isinstance(title, str) else MIN_LIKENESS
 
         if score > best_score:
@@ -112,10 +115,14 @@ def search_game(name: str, key: str) -> int:
     return best if best_score >= MIN_LIKENESS else 0
 
 
-def first_image(kind: str, game_id: int, key: str, filters: tuple[dict[str, str], ...]) -> str:
+def first_image(kind: str, game_id: int, key: str, filters: Tuple[Dict[str, str], ...]) -> str:
     for query in filters:
         for image in get_data(path=f"/{kind}/game/{game_id}", key=key, query=query) or []:
-            url = image.get("url") if isinstance(image, dict) else None
+            try:
+                url = SteamImage.model_validate(obj=image).url
+
+            except ValueError:
+                continue
 
             if isinstance(url, str) and url.startswith("https://") and len(url) < 2048:
                 return url
@@ -126,7 +133,7 @@ def first_image(kind: str, game_id: int, key: str, filters: tuple[dict[str, str]
 # The name first, then its other spellings, until one has art. A game found without art is kept in case
 # no other spelling does better.
 def lookup(name: str, key: str, others: Sequence[str] = ()) -> ArtLookup:
-    kept: ArtLookup | None = None
+    kept: Optional[ArtLookup] = None
 
     for candidate in (name, *others):
         game_id = search_game(name=candidate, key=key)

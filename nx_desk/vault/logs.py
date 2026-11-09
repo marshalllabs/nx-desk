@@ -1,5 +1,6 @@
 import time
 from datetime import date, datetime
+from typing import List
 
 from ..config import LOG_MAX_AGE
 from ..names import clean_game_name, game_of
@@ -9,15 +10,15 @@ from ..schemas.notice import Notice
 from .base import VaultBase
 
 
-# A log entry is (level, time, game, text); game is empty for lines that belong to no game.
+# Game is empty for lines that belong to no game.
 def log_line(text: str, level: str, game: str = "") -> LogEntry:
-    return level, f"{datetime.now():%H:%M:%S}", game, text
+    return LogEntry(level=level, time=f"{datetime.now():%H:%M:%S}", game=game, text=text)
 
 
 class Logs(VaultBase):
     # A session's lines also go to one file per day, so they outlive the app. Logging never stops
     # a job, so a file that cannot be written only loses the line there.
-    def _keep_log(self, log: list[LogEntry], channel: str, text: str, level: str, game: str) -> None:
+    def _keep_log(self, log: List[LogEntry], channel: str, text: str, level: str, game: str) -> None:
         line = log_line(text=text, level=level, game=game)
 
         with self.lock:
@@ -27,8 +28,9 @@ class Logs(VaultBase):
             try:
                 self.logs_dir.mkdir(exist_ok=True)
 
-                with open(self.logs_dir / f"nx-desk-{date.today()}.log", "a", encoding="utf-8") as handle:
-                    handle.write(f"{line[1]} {level.upper():5} {channel:8} {flat}\n")
+                with open(file=self.logs_dir / f"nx-desk-{date.today()}.log", mode="a", encoding="utf-8") as handle:
+                    handle.write(f"{line.time} {level.upper():5} {channel:8} {flat}\n")
+
             except OSError:
                 pass
 
@@ -37,7 +39,7 @@ class Logs(VaultBase):
             if self.notify:
                 self.notices.append(Notice(title=title, text=text))
 
-    def take_notices(self) -> list[Notice]:
+    def take_notices(self) -> List[Notice]:
         with self.lock:
             notices, self.notices = self.notices, []
 
@@ -47,9 +49,10 @@ class Logs(VaultBase):
         oldest = time.time() - LOG_MAX_AGE
 
         try:
-            for path in self.logs_dir.glob("nx-desk-*.log"):
+            for path in self.logs_dir.glob(pattern="nx-desk-*.log"):
                 if path.stat().st_mtime < oldest:
                     path.unlink()
+
         except OSError:
             pass
 

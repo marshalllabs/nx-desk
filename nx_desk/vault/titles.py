@@ -1,6 +1,6 @@
 import http.client
-import json
 import time
+from typing import Dict, List
 
 from .. import config as settings
 from .. import net
@@ -12,18 +12,19 @@ from ..config import (
     TITLE_IDS_MAX_AGE,
 )
 from ..schemas.title import TitleRow, TitleSnapshot
+from ..utils.json import parse_json
 from .base import VaultBase
 
 
 class Titles(VaultBase):
     # Names come from the title ID list. Without it, games keep their catalog names.
-    def title_names(self) -> dict[str, str]:
+    def title_names(self) -> Dict[str, str]:
         self.load_title_ids()
 
         with self.lock:
             return game_names(rows=self.title_rows)
 
-    def _keep_title_rows(self, rows: list[TitleRow]) -> None:
+    def _keep_title_rows(self, rows: List[TitleRow]) -> None:
         if rows:
             with self.lock:
                 self.title_rows = rows
@@ -55,13 +56,14 @@ class Titles(VaultBase):
                 if len(raw) > MAX_CATALOG:
                     raise ValueError("the title ID list is too large")
 
-                rows = parse_title_ids(data=json.loads(s=raw))
+                rows = parse_title_ids(data=parse_json(text=raw))
 
                 if not rows:
                     raise ValueError("the title ID list is empty")
 
                 self._write_bytes(path=path, data=raw)
                 self._keep_title_rows(rows=rows)
+
         except (OSError, ValueError, http.client.HTTPException) as error_found:
             error = str(error_found) or type(error_found).__name__
 
@@ -78,7 +80,7 @@ class Titles(VaultBase):
                 error=self.title_error,
             )
 
-    def refresh_titles(self) -> dict[str, str]:
+    def refresh_titles(self) -> Dict[str, str]:
         names = self.title_names()
 
         with self.lock:

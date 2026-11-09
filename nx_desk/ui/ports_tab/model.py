@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, List, Tuple, Union
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
 from PySide6.QtGui import QColor
@@ -6,17 +6,18 @@ from PySide6.QtGui import QColor
 from ...catalog.ports import status_label, status_tone
 from ...schemas.card import Card
 from ...schemas.port import Port
+from ...schemas.presentation import Column
 from ..cards.layout import CARD_ROLE
 from ..rows import SortState
 from ..theme import COLORS
 
-COLUMNS: tuple[tuple[str, str, int], ...] = (
-    ("name", "Name", 0),
-    ("platform", "Platform", 230),
-    ("type", "Type", 150),
-    ("version", "Version", 130),
-    ("updated", "Updated", 110),
-    ("status", "Status", 170),
+COLUMNS: Tuple[Column, ...] = (
+    Column(key="name", title="Name", width=0),
+    Column(key="platform", title="Platform", width=230),
+    Column(key="type", title="Type", width=150),
+    Column(key="version", title="Version", width=130),
+    Column(key="updated", title="Updated", width=110),
+    Column(key="status", title="Status", width=170),
 )
 STATUS: Final = 5
 ROW_HEIGHT = 36
@@ -51,25 +52,25 @@ class PortModel(QAbstractTableModel):
     def __init__(self, sort: SortState) -> None:
         super().__init__()
         self.order = sort
-        self.rows: list[Port] = []
+        self.rows: List[Port] = []
 
-    def set_rows(self, rows: list[Port]) -> None:
+    def set_rows(self, rows: List[Port]) -> None:
         self.beginResetModel()
         self.rows = rows
         self.endResetModel()
 
-    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:  # noqa: B008
+    def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self.rows)
 
-    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:  # noqa: B008
+    def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(COLUMNS)
 
-    def data(self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+    def data(self, index: Union[QModelIndex, QPersistentModelIndex], role: int = Qt.ItemDataRole.DisplayRole) -> object:
         port = self.rows[index.row()]
         column = index.column()
 
         if role == Qt.ItemDataRole.DisplayRole:
-            return cell(port=port, column=COLUMNS[column][0])
+            return cell(port=port, column=COLUMNS[column].key)
 
         if role == Qt.ItemDataRole.ForegroundRole:
             # Only the status carries its colour, next to its words; the rest stays plain to read.
@@ -87,7 +88,8 @@ class PortModel(QAbstractTableModel):
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole) -> object:
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            name, title, _ = COLUMNS[section]
+            column = COLUMNS[section]
+            name, title = column.key, column.title
 
             return self.order.title(column=name, text=title)
 

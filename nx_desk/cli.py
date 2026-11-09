@@ -67,6 +67,7 @@ def main() -> int:
 
     try:
         from .ui.app import App  # Here, so that --check works without Qt.
+
     except ImportError as error:
         if not (error.name or "").startswith(("PySide6", "shiboken6")):
             raise

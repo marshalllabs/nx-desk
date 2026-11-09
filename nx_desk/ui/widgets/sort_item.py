@@ -1,3 +1,5 @@
+from typing import List
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QTreeWidgetItem,
@@ -6,7 +8,7 @@ from PySide6.QtWidgets import (
 
 # Sorts by the column's key, with folders before other rows whichever way the column goes.
 class SortItem(QTreeWidgetItem):
-    def __init__(self, texts: list[str], name: str, size: int = 0, folder: bool = False, group: bool = False) -> None:
+    def __init__(self, texts: List[str], name: str, size: int = 0, folder: bool = False, group: bool = False) -> None:
         super().__init__(texts)
         self.name = name.casefold()
         self.size = size

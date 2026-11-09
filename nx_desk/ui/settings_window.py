@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
@@ -16,7 +16,9 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import COMPRESSION_LEVELS
-from ..names import SIZE_UNITS
+from ..schemas.presentation import Preferences
+from ..utils.sizes import SIZE_UNITS
+from .layout_models import FormGroup
 from .style import DEFAULT_FONT_SIZE, FONT_SIZES, default_family
 from .theme import SPACE
 from .widgets.basics import button, label
@@ -41,7 +43,7 @@ class SettingsWindow(QDialog):
         self.vault = app.vault
         self.setWindowTitle("Settings")
         self.setMinimumWidth(600)
-        self.forms: list[QFormLayout] = []
+        self.forms: List[QFormLayout] = []
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 14, 18, 14)
         layout.setSpacing(12)
@@ -61,7 +63,7 @@ class SettingsWindow(QDialog):
         self.align_labels()
         self.paint_pending()
 
-    def group(self, title: str) -> tuple[QGroupBox, QFormLayout]:
+    def group(self, title: str) -> FormGroup:
         box = QGroupBox(title)
         form = QFormLayout(box)
         form.setHorizontalSpacing(SPACE["md"])
@@ -69,7 +71,7 @@ class SettingsWindow(QDialog):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.forms.append(form)
 
-        return box, form
+        return FormGroup(box=box, form=form)
 
     # Every group gets the widest label's width, so the fields of all groups line up.
     def align_labels(self) -> None:
@@ -85,7 +87,9 @@ class SettingsWindow(QDialog):
             widget.setMinimumWidth(width)
 
     def build_appearance(self) -> QGroupBox:
-        box, form = self.group(title="Appearance")
+        group = self.group(title="Appearance")
+        box = group.box
+        form = group.form
         self.family_box = QFontComboBox()
         # Its own size hint fits the longest family name, which left the "Font" label no room.
         self.family_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -107,7 +111,9 @@ class SettingsWindow(QDialog):
         return box
 
     def build_downloads(self) -> QGroupBox:
-        box, form = self.group(title="Downloads")
+        group = self.group(title="Downloads")
+        box = group.box
+        form = group.form
         self.compression = QComboBox()
 
         for text, level in COMPRESSION_LEVELS:
@@ -129,7 +135,9 @@ class SettingsWindow(QDialog):
 
     # The key is never shown back: the field only takes a new one, and Remove forgets the saved one.
     def build_art(self) -> QGroupBox:
-        box, form = self.group(title="Game art")
+        group = self.group(title="Game art")
+        box = group.box
+        form = group.form
         self.forget_key = False
         self.key_entry = QLineEdit()
         self.key_entry.setEchoMode(QLineEdit.EchoMode.Password)
@@ -154,7 +162,9 @@ class SettingsWindow(QDialog):
         return box
 
     def paint_key(self) -> None:
-        place, error = self.vault.art_status()
+        status = self.vault.art_status()
+        place = status.place
+        error = status.error
         saved = place != "" and not self.forget_key
         self.key_entry.setPlaceholderText(
             "A key is saved; paste another to replace it" if saved else "Paste a key from steamgriddb.com",
@@ -175,7 +185,9 @@ class SettingsWindow(QDialog):
         self.paint_pending()
 
     def build_other(self) -> QGroupBox:
-        box, form = self.group(title="Notifications and logs")
+        group = self.group(title="Notifications and logs")
+        box = group.box
+        form = group.form
         self.notify = QCheckBox("Show desktop notifications")
         self.notify.setToolTip("For new or changed mods and finished runs")
         self.notify.setChecked(self.vault.notify)
@@ -190,31 +202,46 @@ class SettingsWindow(QDialog):
 
     # The values as they would be saved; the default font is saved as empty, so a later default
     # still reaches it.
-    def chosen(self) -> tuple[str, int, object, str, bool, str, bool]:
+    def chosen(self) -> Preferences:
         family = self.family_box.currentFont().family()
         size = self.size_box.value()
 
-        return (
-            "" if family == default_family() else family,
-            0 if size == DEFAULT_FONT_SIZE else size,
-            self.compression.currentData(),
-            str(self.units.currentData()),
-            self.notify.isChecked(),
-            self.key_entry.text().strip(),
-            self.forget_key,
+        return Preferences(
+            font_family="" if family == default_family() else family,
+            font_size=0 if size == DEFAULT_FONT_SIZE else size,
+            compression=self.compression.currentData(),
+            units=str(self.units.currentData()),
+            notify=self.notify.isChecked(),
+            key=self.key_entry.text().strip(),
+            forget=self.forget_key,
         )
 
-    def saved(self) -> tuple[str, int, object, str, bool, str, bool]:
+    def saved(self) -> Preferences:
         vault = self.vault
 
-        return vault.font_family, vault.font_size, vault.compression, vault.size_units, vault.notify, "", False
+        return Preferences(
+            font_family=vault.font_family,
+            font_size=vault.font_size,
+            compression=vault.compression,
+            units=vault.size_units,
+            notify=vault.notify,
+            key="",
+            forget=False,
+        )
 
     def paint_pending(self) -> None:
         self.apply_button.setEnabled(self.chosen() != self.saved())
 
     # Only what changed is applied, so an unchanged font does not restyle the whole window.
     def apply(self) -> None:
-        family, size, compression, units, notify, key, forget = self.chosen()
+        preferences = self.chosen()
+        family = preferences.font_family
+        size = preferences.font_size
+        compression = preferences.compression
+        units = preferences.units
+        notify = preferences.notify
+        key = preferences.key
+        forget = preferences.forget
 
         if (family, size) != (self.vault.font_family, self.vault.font_size):
             self.app.set_font(family=family, size=size)

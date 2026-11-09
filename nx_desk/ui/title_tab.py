@@ -1,6 +1,6 @@
 import functools
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
 from PySide6.QtGui import QAction, QFont, QFontDatabase, QKeySequence
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..catalog.title_ids import find_titles
+from ..schemas.presentation import Column
 from ..schemas.title import TitleRow, TitleSnapshot
 from ..utils.text import plural
 from .rows import SortState
@@ -30,11 +31,11 @@ if TYPE_CHECKING:
 SECTIONS = (("", "All"), ("games", "Games"), ("system", "System"), ("sysmodules", "Sysmodules"))
 SECTION_TYPES = {"games": "Game", "system": "System", "sysmodules": "Sysmodule"}
 # Name is wide but resizable; the last column takes what is left, so Type and Group sit beside the name.
-COLUMNS: tuple[tuple[str, str, int], ...] = (
-    ("id", "Title ID", 190),
-    ("name", "Name", 620),
-    ("kind", "Type", 120),
-    ("detail", "Group", 0),
+COLUMNS: Tuple[Column, ...] = (
+    Column(key="id", title="Title ID", width=190),
+    Column(key="name", title="Name", width=620),
+    Column(key="kind", title="Type", width=120),
+    Column(key="detail", title="Group", width=0),
 )
 
 
@@ -59,22 +60,22 @@ class TitleModel(QAbstractTableModel):
     def __init__(self, sort: SortState) -> None:
         super().__init__()
         self.order = sort
-        self.rows: list[ShownTitle] = []
+        self.rows: List[ShownTitle] = []
 
-    def set_rows(self, rows: list[ShownTitle]) -> None:
+    def set_rows(self, rows: List[ShownTitle]) -> None:
         self.beginResetModel()
         self.rows = rows
         self.endResetModel()
 
-    def rowCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:  # noqa: B008
+    def rowCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self.rows)
 
-    def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:  # noqa: B008
+    def columnCount(self, parent: Union[QModelIndex, QPersistentModelIndex] = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(COLUMNS)
 
-    def data(self, index: QModelIndex | QPersistentModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+    def data(self, index: Union[QModelIndex, QPersistentModelIndex], role: int = Qt.ItemDataRole.DisplayRole) -> object:
         if role == Qt.ItemDataRole.DisplayRole:
-            return cell(row=self.rows[index.row()], column=COLUMNS[index.column()][0])
+            return cell(row=self.rows[index.row()], column=COLUMNS[index.column()].key)
 
         # Title IDs are 16 hex digits; a fixed-width font keeps them aligned and easy to compare.
         if role == Qt.ItemDataRole.FontRole and index.column() == 0:
@@ -84,7 +85,8 @@ class TitleModel(QAbstractTableModel):
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole) -> object:
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
-            name, title, _ = COLUMNS[section]
+            column = COLUMNS[section]
+            name, title = column.key, column.title
 
             return self.order.title(column=name, text=title)
 
@@ -96,8 +98,8 @@ class TitleTab(QWidget):
         super().__init__()
         self.app = app
         self.vault = app.vault
-        self.version: int | None = None
-        self.rows: list[ShownTitle] = []
+        self.version: Optional[int] = None
+        self.rows: List[ShownTitle] = []
         self.section = ""
         self.sort = SortState(column="name")
         layout = QVBoxLayout(self)
@@ -115,7 +117,7 @@ class TitleTab(QWidget):
         clear_on_escape(box=self.query)
         top.addWidget(self.query)
         top.addSpacing(10)
-        self.buttons: dict[str, QPushButton] = {}
+        self.buttons: Dict[str, QPushButton] = {}
 
         for section, _ in SECTIONS:
             choice = button(text="", action=functools.partial(self.choose, section))
@@ -145,10 +147,13 @@ class TitleTab(QWidget):
         header.setHighlightSections(False)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        for index, (_, _, width) in enumerate(COLUMNS):
+        for index, spec in enumerate(iterable=COLUMNS):
+            width = spec.width
+
             if width:
                 header.setSectionResizeMode(index, QHeaderView.ResizeMode.Interactive)
                 header.resizeSection(index, width)
+
             else:
                 header.setSectionResizeMode(index, QHeaderView.ResizeMode.Stretch)
 
@@ -182,7 +187,7 @@ class TitleTab(QWidget):
             self.buttons[section].setAccessibleName(f"{text} ({count:,})" + (", shown" if chosen else ""))
 
     def sort_by(self, column: int) -> None:
-        self.sort.toggle(column=COLUMNS[column][0])
+        self.sort.toggle(column=COLUMNS[column].key)
         self.fill()
 
     def fill(self) -> None:

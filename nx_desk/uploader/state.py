@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
+from typing import Dict
 
 from ..schemas.github import Asset
-from ..schemas.state import ReleaseRecord
+from ..schemas.state import ReleaseDocument, ReleaseRecord
 from ..utils.files import sha256_of
 from . import archive, command, releases, upload
 
@@ -10,27 +11,17 @@ from . import archive, command, releases, upload
 STATE_ASSET = "state.json"
 
 
-def clean_state(data: object) -> dict[str, ReleaseRecord]:
-    mods = data.get("mods") if isinstance(data, dict) else None
+def clean_state(data: object) -> Dict[str, ReleaseRecord]:
+    try:
+        document = ReleaseDocument.model_validate(obj=data)
 
-    if not isinstance(mods, dict):
+    except ValueError:
         return {}
 
-    fields = ("sha256", "version", "game_version", "folder", "uploaded_at")
-    clean: dict[str, ReleaseRecord] = {}
-
-    for key, record in mods.items():
-        if isinstance(key, str) and isinstance(record, dict):
-            # Only the string fields of each record survive, so the result fits the schema.
-            kept = {field: record[field] for field in fields if isinstance(record.get(field), str)}
-            files = record.get("files")
-            names = [name for name in files if isinstance(name, str)] if isinstance(files, list) else []
-            clean[key] = ReleaseRecord(**kept, files=names)
-
-    return clean
+    return dict(document.mods)
 
 
-def read_state(repo: str, tag: str, asset: Asset, place: Path) -> dict[str, ReleaseRecord]:
+def read_state(repo: str, tag: str, asset: Asset, place: Path) -> Dict[str, ReleaseRecord]:
     command.gh("release", "download", tag, "--repo", repo, "--pattern", STATE_ASSET, "--dir", str(place))
     path = place / STATE_ASSET
     digest = asset.digest
@@ -40,6 +31,7 @@ def read_state(repo: str, tag: str, asset: Asset, place: Path) -> dict[str, Rele
 
     try:
         return clean_state(data=json.loads(s=path.read_text(encoding="utf-8")))
+
     except ValueError as error:
         raise command.GhError(f"{STATE_ASSET} on release {tag} is not valid JSON") from error
 

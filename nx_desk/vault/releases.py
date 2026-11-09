@@ -1,5 +1,5 @@
-from collections.abc import Collection
 from pathlib import Path
+from typing import Collection, Dict, List, Optional, Set
 
 from .. import uploader
 from ..config import STATE_FILE
@@ -10,7 +10,7 @@ from .source import UploadSource
 
 
 class Releases(UploadSource, ReleaseStates):
-    def _refresh_assets(self, repo: str, tag: str, new_stem: str | None = None) -> list[Asset]:
+    def _refresh_assets(self, repo: str, tag: str, new_stem: Optional[str] = None) -> List[Asset]:
         assets = uploader.releases.remote_assets(repo=repo, tag=tag)
         rows = [asset for name, asset in assets.items() if self._listed(name=name)]
         added = list(uploader.parts.owned_assets(stem=new_stem, assets=assets)) if new_stem else []
@@ -37,7 +37,7 @@ class Releases(UploadSource, ReleaseStates):
         self._run_upload_step(phase="loading", step=step)
 
     # Mods whose files were deleted by hand leave state.json too.
-    def _forget_in_state(self, repo: str, tag: str, names: set[str]) -> None:
+    def _forget_in_state(self, repo: str, tag: str, names: Set[str]) -> None:
         if not self.linked_catalog(tag=tag) or uploader.state.STATE_ASSET not in uploader.releases.remote_assets(
             repo=repo,
             tag=tag,
@@ -46,7 +46,7 @@ class Releases(UploadSource, ReleaseStates):
 
         gone = []
 
-        def change(mods: dict[str, ReleaseRecord], _assets: dict[str, Asset]) -> None:
+        def change(mods: Dict[str, ReleaseRecord], _assets: Dict[str, Asset]) -> None:
             for key in [key for key, record in mods.items() if names & set(record.files)]:
                 gone.append(mods.pop(key).folder or key)
 
@@ -57,7 +57,7 @@ class Releases(UploadSource, ReleaseStates):
 
     # Folders uploaded by hand join state.json when this app downloaded them, which gives the
     # SHA-256 of the original file; others cannot be told apart from an older release.
-    def _record_in_state(self, repo: str, tag: str, folder_names: list[str]) -> None:
+    def _record_in_state(self, repo: str, tag: str, folder_names: List[str]) -> None:
         catalog = self.linked_catalog(tag=tag)
 
         if not catalog or not folder_names:
@@ -68,7 +68,7 @@ class Releases(UploadSource, ReleaseStates):
             schema=DOWNLOAD_RECORDS,
             default={},
         )
-        by_folder = {record.file.split("/")[0]: (entry_id, record) for entry_id, record in records.items()}
+        by_folder = {record.file.split(sep="/")[0]: (entry_id, record) for entry_id, record in records.items()}
         known = [name for name in folder_names if name in by_folder]
 
         for name in sorted(set(folder_names) - set(known)):
@@ -81,7 +81,7 @@ class Releases(UploadSource, ReleaseStates):
         if not known:
             return
 
-        def change(mods: dict[str, ReleaseRecord], assets: dict[str, Asset]) -> None:
+        def change(mods: Dict[str, ReleaseRecord], assets: Dict[str, Asset]) -> None:
             for name in known:
                 entry_id, record = by_folder[name]
                 files = list(uploader.parts.owned_assets(stem=uploader.archive.asset_stem(name=name), assets=assets))
@@ -97,7 +97,7 @@ class Releases(UploadSource, ReleaseStates):
         for name in known:
             self._log_folder(folder_name=name, text=f"recorded in {uploader.state.STATE_ASSET}")
 
-    def release_source(self, tag: str) -> Path | None:
+    def release_source(self, tag: str) -> Optional[Path]:
         folder = self._download_root() / tag if tag and "/" not in tag and tag not in (".", "..") else None
 
         return folder if folder and folder.is_dir() else None
@@ -205,7 +205,7 @@ class Releases(UploadSource, ReleaseStates):
         self._run_upload_step(phase="loading", step=step)
 
     # The latest release comes first and the rest by name. With no release named, the first is chosen.
-    def _refresh_releases(self, repo: str, select: str | None = None) -> list[str]:
+    def _refresh_releases(self, repo: str, select: Optional[str] = None) -> List[str]:
         tags = uploader.releases.list_releases(repo=repo)
         latest = uploader.releases.latest_release(repo=repo)
         latest = latest if latest in tags else ""

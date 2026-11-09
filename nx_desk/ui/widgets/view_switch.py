@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Callable
+from typing import Callable, Dict, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -19,14 +19,14 @@ class ViewSwitch(QWidget):
     def __init__(
         self,
         swap: Callable[[str], None],
-        views: tuple[tuple[str, str], ...] = VIEWS,
+        views: Tuple[Tuple[str, str], ...] = VIEWS,
         bottom: int = 4,
     ) -> None:
         super().__init__()
         self.swap = swap
         self.views = list(views)
         self.shown = ""
-        self.buttons: dict[str, QPushButton] = {}
+        self.buttons: Dict[str, QPushButton] = {}
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, bottom)
         layout.setSpacing(0)

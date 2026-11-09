@@ -1,6 +1,6 @@
 import html
 import json
-from collections.abc import Iterable, Sequence
+from typing import Iterable, Sequence
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFontDatabase
@@ -18,12 +18,13 @@ from PySide6.QtWidgets import (
 )
 
 from ...catalog.fields import CATALOG_TEMPLATE, FIELD_ALIASES, ROOT_ALIASES
+from ...schemas.presentation import FieldRow
 from ..theme import COLORS
 from ..widgets.basics import button, copy_text, label
 from .json_highlighter import JsonHighlighter
 
 # A row of the format window: the key, its type and the other names read for it.
-FieldRow = tuple[str, str, list[str]]
+# Format rows use the shared FieldRow schema.
 
 
 # What a catalog needs to be read without a field mapping: the fields in two sections, each with
@@ -50,7 +51,7 @@ class FormatWindow(QDialog):
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
-        self.template = json.dumps(obj=CATALOG_TEMPLATE, ensure_ascii=False, indent=2) + "\n"
+        self.template = json.dumps(obj=CATALOG_TEMPLATE.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n"
         self.setWindowTitle("Catalog format")
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
         layout = QVBoxLayout(self)
@@ -61,11 +62,11 @@ class FormatWindow(QDialog):
         column = QVBoxLayout(page)
         column.setContentsMargins(12, 4, 12, 12)
         column.setSpacing(8)
-        keys = list(CATALOG_TEMPLATE["mods"][0])
+        keys = list(type(CATALOG_TEMPLATE.mods[0]).model_fields)
         column.addWidget(
             self.section(
                 title="Games list",
-                rows=[("mods", "array of games, or the whole file is one", ROOT_ALIASES[1:])],
+                rows=[FieldRow(key="mods", kind="array of games, or the whole file is one", aliases=ROOT_ALIASES[1:])],
             ),
         )
         column.addWidget(
@@ -99,7 +100,7 @@ class FormatWindow(QDialog):
     def field(self, key: str) -> FieldRow:
         names = next((names for names in FIELD_ALIASES.values() if names[0] == key), [key])
 
-        return key, self.TYPES.get(key, "text"), names[1:]
+        return FieldRow(key=key, kind=self.TYPES.get(key, "text"), aliases=names[1:])
 
     # Each other name is a chip, like the genres in the Catalog tab; no-break spaces pad a chip, so
     # a line only breaks between chips.
@@ -122,10 +123,11 @@ class FormatWindow(QDialog):
         grid.setColumnMinimumWidth(1, 300)
         grid.setColumnStretch(2, 1)
 
-        for column, text in enumerate(("Key", "Type", "Also read as")):
+        for column, text in enumerate(iterable=("Key", "Type", "Also read as")):
             grid.addWidget(label(text=text, role="muted"), 0, column)
 
-        for index, (key, kind, names) in enumerate(rows, 1):
+        for index, field in enumerate(iterable=rows, start=1):
+            key, kind, names = field.key, field.kind, field.aliases
             grid.addWidget(label(text=key, role="key"), index, 0, Qt.AlignmentFlag.AlignTop)
             grid.addWidget(label(text=kind, role="muted"), index, 1, Qt.AlignmentFlag.AlignTop)
             chips = QLabel(self.chips(names=names))

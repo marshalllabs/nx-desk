@@ -1,6 +1,6 @@
 import shutil
-from collections.abc import Collection
 from pathlib import Path
+from typing import Collection, List, Optional
 
 from .. import uploader
 from ..names import GAME_FOLDER, folder_zip_names
@@ -13,7 +13,7 @@ from .github_job import GitHubJob
 class UploadSource(GitHubJob):
     # A game folder (new format) is one upload unit; a plain folder is a container that holds
     # them. Branches with no game folder under them are dropped from the tree.
-    def _scan_tree(self, path: Path, units: list[Folder]) -> TreeNode | None:
+    def _scan_tree(self, path: Path, units: List[Folder]) -> Optional[TreeNode]:
         if GAME_FOLDER.match(string=path.name):
             # A mod folder is a leaf. It is a unit only when it holds a zip of the same name;
             # otherwise it is shown as invalid and left out of uploads.
@@ -58,8 +58,8 @@ class UploadSource(GitHubJob):
         if not self.upload_source or not root.is_dir():
             raise ValueError("Choose a source folder")
 
-        units: list[Folder] = []
-        nodes: list[TreeNode] = []
+        units: List[Folder] = []
+        nodes: List[TreeNode] = []
 
         for child in sorted(root.iterdir(), key=lambda p: p.name.casefold()):
             if child.is_dir() and not child.is_symlink():
@@ -103,6 +103,7 @@ class UploadSource(GitHubJob):
         if source and source.is_dir() and (source == path or source in path.parents):
             try:
                 self._scan_source()
+
             except (OSError, ValueError) as error:
                 self._log_github(text=f"could not scan the source folder: {error}", level="warn")
 
@@ -125,6 +126,7 @@ class UploadSource(GitHubJob):
 
         try:
             shutil.rmtree(path=path)
+
         except OSError as error:
             self._log_folder(folder_name=folder.name, text=f"could not delete the local copy: {error}", level="error")
 

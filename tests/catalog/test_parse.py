@@ -10,25 +10,28 @@ from tests.helpers import TITLE, entry, mod, normal
 
 class CatalogTests(unittest.TestCase):
     def test_rejects_unsafe_entries(self) -> None:
-        self.assertIsNone(normalize(raw=entry(id="../x")))
-        self.assertIsNone(normalize(raw=entry(url="http://example.com/a.zip")))
+        self.assertIsNone(obj=normalize(raw=entry(id="../x")))
+        self.assertIsNone(obj=normalize(raw=entry(url="http://example.com/a.zip")))
         # A bad or missing hash no longer rejects the entry; verification simply degrades.
-        self.assertEqual(mod(sha256="abc").sha256, "")
+        self.assertEqual(first=mod(sha256="abc").sha256, second="")
 
     def test_resolves_gdrive_mirrors(self) -> None:
         item = mod(mirrors=["gdrive:abcdefghij1234"])
-        self.assertEqual(item.urls[1], settings.GDRIVE_URL + "abcdefghij1234")
+        self.assertEqual(first=item.urls[1], second=settings.GDRIVE_URL + "abcdefghij1234")
 
     def test_target_path_uses_the_vault_format(self) -> None:
         item = mod(name="One: Two/Three", game_version="1.0.6 (kèm DLC)")
         path = names.download_path(name=item.name, version=item.game_version, mod="Bản A")
-        self.assertEqual(path.as_posix(), "One Two Three - [Bản A] - [1.0.6]/One Two Three - [Bản A] - [1.0.6].zip")
+        self.assertEqual(
+            first=path.as_posix(),
+            second="One Two Three - [Bản A] - [1.0.6]/One Two Three - [Bản A] - [1.0.6].zip",
+        )
 
     def test_missing_game_version(self) -> None:
         item = mod()
         self.assertEqual(
-            names.download_path(name=item.name, version=item.game_version, mod="VI").name,
-            "Game - [VI] - [Miss].zip",
+            first=names.download_path(name=item.name, version=item.game_version, mod="VI").name,
+            second="Game - [VI] - [Miss].zip",
         )
 
 
@@ -41,27 +44,36 @@ class ArtworkTests(unittest.TestCase):
         }
 
         for name, slug in cases.items():
-            self.assertEqual(names.art_slug(name=name), slug)
+            self.assertEqual(first=names.art_slug(name=name), second=slug)
 
     def test_file_name_has_kind_and_a_safe_extension(self) -> None:
         item = mod(id="a", name="Game One", cover="https://x.test/a/c.JPG?v=1", background="https://x.test/b")
         # The stem, a digest of the URL, and the extension the URL gives.
-        self.assertEqual(names.art_file_name(item=item, kind="cover", url=item.cover), "game-one-cover.fa3c4f20.jpg")
         self.assertEqual(
-            names.art_file_name(item=item, kind="background", url=item.background),
-            "game-one-background.8173517f.img",
+            first=names.art_file_name(item=item, kind="cover", url=item.cover),
+            second="game-one-cover.fa3c4f20.jpg",
+        )
+        self.assertEqual(
+            first=names.art_file_name(item=item, kind="background", url=item.background),
+            second="game-one-background.8173517f.img",
         )
 
     def test_another_url_gives_another_name_and_the_same_url_the_same(self) -> None:
         item = mod(id="a", name="Game One")
         first = names.art_file_name(item=item, kind="cover", url="https://x.test/one.png")
-        self.assertEqual(first, names.art_file_name(item=item, kind="cover", url="https://x.test/one.png"))
-        self.assertNotEqual(first, names.art_file_name(item=item, kind="cover", url="https://x.test/two.png"))
-        self.assertEqual(names.art_stem_of(file_name=first), "game-one-cover")
+        self.assertEqual(first=first, second=names.art_file_name(item=item, kind="cover", url="https://x.test/one.png"))
+        self.assertNotEqual(
+            first=first,
+            second=names.art_file_name(item=item, kind="cover", url="https://x.test/two.png"),
+        )
+        self.assertEqual(first=names.art_stem_of(file_name=first), second="game-one-cover")
 
     def test_file_name_falls_back_to_the_id(self) -> None:
         item = mod(id="a", name="???", cover="https://x.test/c.png")
-        self.assertEqual(names.art_file_name(item=item, kind="cover", url=item.cover), "a-cover.1ba75ac3.png")
+        self.assertEqual(
+            first=names.art_file_name(item=item, kind="cover", url=item.cover),
+            second="a-cover.1ba75ac3.png",
+        )
 
 
 class FlexibleCatalogTests(unittest.TestCase):
@@ -72,14 +84,14 @@ class FlexibleCatalogTests(unittest.TestCase):
             ],
         }
         item = parse_catalog(data=raw).items[0]
-        self.assertEqual(item.name, "Trò Chơi")
-        self.assertEqual(item.urls, ["https://x.test/a.zip"])
-        self.assertEqual(item.version, "1.2")
-        self.assertEqual(item.tags, ["RPG"])
-        self.assertEqual(item.id, "tro-choi")  # derived from the name when no id is given
+        self.assertEqual(first=item.name, second="Trò Chơi")
+        self.assertEqual(first=item.urls, second=["https://x.test/a.zip"])
+        self.assertEqual(first=item.version, second="1.2")
+        self.assertEqual(first=item.tags, second=["RPG"])
+        self.assertEqual(first=item.id, second="tro-choi")  # derived from the name when no id is given
 
     def test_top_level_list_is_a_catalog(self) -> None:
-        self.assertEqual(len(parse_catalog(data=[{"name": "A", "url": "https://x.test/a.zip"}]).items), 1)
+        self.assertEqual(first=len(parse_catalog(data=[{"name": "A", "url": "https://x.test/a.zip"}]).items), second=1)
 
     def test_nested_file_fields(self) -> None:
         raw = {
@@ -88,23 +100,26 @@ class FlexibleCatalogTests(unittest.TestCase):
             ],
         }
         item = parse_catalog(data=raw).items[0]
-        self.assertEqual((item.urls, item.sha256, item.size), (["https://x.test/a.zip"], "a" * 64, 10))
+        self.assertEqual(first=(item.urls, item.sha256, item.size), second=(["https://x.test/a.zip"], "a" * 64, 10))
 
     def test_manual_mapping_overrides_everything(self) -> None:
         raw = {"payload": [{"slug": "pack1", "tenGame": "Game", "tai": "https://x.test/a.zip"}]}
         mapping = {"__root__": "payload", "id": "slug", "name": "tenGame", "url": "tai"}
         item = parse_catalog(data=raw, mapping=mapping).items[0]
-        self.assertEqual((item.id, item.name, item.urls), ("pack1", "Game", ["https://x.test/a.zip"]))
+        self.assertEqual(first=(item.id, item.name, item.urls), second=("pack1", "Game", ["https://x.test/a.zip"]))
 
     def test_size_accepts_a_formatted_string(self) -> None:
-        self.assertEqual(normal(raw={"id": "g", "url": "https://x.test/a.zip", "size": "1,234"}).size, 1234)
+        self.assertEqual(
+            first=normal(raw={"id": "g", "url": "https://x.test/a.zip", "size": "1,234"}).size,
+            second=1234,
+        )
 
     def test_optional_fields_default_safely(self) -> None:
         item = normal(raw={"id": "g", "url": "https://x.test/a.zip"})
-        self.assertEqual((item.sha256, item.size, item.title_id), ("", 0, ""))
+        self.assertEqual(first=(item.sha256, item.size, item.title_id), second=("", 0, ""))
 
     def test_clean_mapping_drops_blanks(self) -> None:
-        self.assertEqual(clean_mapping(mapping={"id": " slug ", "name": "", "url": None}), {"id": "slug"})
+        self.assertEqual(first=clean_mapping(mapping={"id": " slug ", "name": "", "url": None}), second={"id": "slug"})
 
 
 class VersionFallbackTests(unittest.TestCase):
@@ -119,5 +134,5 @@ class VersionFallbackTests(unittest.TestCase):
             target.parent.mkdir(parents=True)
             target.write_bytes(data=b"zip")
             store._commit(entry=item, target=target)
-            self.assertEqual(store.status_of(entry=item), "ok")
-            self.assertEqual(store.status_of(entry=item.model_copy(update={"version": "1.1"})), "update")
+            self.assertEqual(first=store.status_of(entry=item), second="ok")
+            self.assertEqual(first=store.status_of(entry=item.model_copy(update={"version": "1.1"})), second="update")

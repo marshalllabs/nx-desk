@@ -1,29 +1,42 @@
+from typing import List, Set
+
+from ..schemas.feeds import HomebrewInput, ListFeed
 from ..schemas.homebrew import Homebrew
-from .values import as_text, https_or_empty
+from ..utils.urls import https_or_empty
+from .values import as_text
 
 
-def parse_homebrews(data: object) -> list[Homebrew]:
-    raw_rows = data.get("homebrews") if isinstance(data, dict) else None
-    rows: list[Homebrew] = []
-    seen: set[str] = set()
+def parse_homebrews(data: object) -> List[Homebrew]:
+    try:
+        feed = ListFeed.model_validate(obj=data)
+
+    except ValueError:
+        return []
+
+    raw_rows = feed.homebrews
+    rows: List[Homebrew] = []
+    seen: Set[str] = set()
 
     for raw in raw_rows if isinstance(raw_rows, list) else ():
-        if not isinstance(raw, dict):
+        try:
+            source = HomebrewInput.model_validate(obj=raw)
+
+        except ValueError:
             continue
 
-        key, name = (as_text(value=raw.get(field)).strip()[:300] for field in ("id", "name"))
+        key, name = as_text(value=source.id).strip()[:300], as_text(value=source.name).strip()[:300]
 
         if not key or not name or key in seen:
             continue
 
-        groups = raw.get("groups")
-        clean = {
-            field: as_text(value=raw.get(field)).strip()[: 4000 if field == "description" else 500]
-            for field in ("description", "category", "version", "authors", "updated")
-        }
+        groups = source.groups
         row = Homebrew.model_validate(
             obj={
-                **clean,
+                "description": as_text(value=source.description).strip()[:4000],
+                "category": as_text(value=source.category).strip()[:500],
+                "version": as_text(value=source.version).strip()[:500],
+                "authors": as_text(value=source.authors).strip()[:500],
+                "updated": as_text(value=source.updated).strip()[:500],
                 "id": key,
                 "name": name,
                 "groups": list(
@@ -31,7 +44,7 @@ def parse_homebrews(data: object) -> list[Homebrew]:
                 )
                 if isinstance(groups, list)
                 else [],
-                "url": https_or_empty(value=raw.get("url")),
+                "url": https_or_empty(value=source.url),
             },
         )
         seen.add(key)
@@ -40,7 +53,7 @@ def parse_homebrews(data: object) -> list[Homebrew]:
     return rows
 
 
-def find_homebrews(rows: list[Homebrew], query: str) -> list[Homebrew]:
+def find_homebrews(rows: List[Homebrew], query: str) -> List[Homebrew]:
     words = query.casefold().split()
 
     return [

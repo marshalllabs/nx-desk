@@ -1,4 +1,5 @@
 import collections
+from typing import List
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -10,8 +11,9 @@ from PySide6.QtWidgets import (
 )
 
 from ... import uploader
-from ...names import format_size
 from ...schemas.github import CompareRow, UploadSnapshot
+from ...schemas.presentation import CompareStamp
+from ...utils.sizes import format_size
 from ..rows import COMPARE_STATES, compare_status, release_labels
 from ..theme import COLORS
 from ..widgets.basics import choice, fill_choices, label, tool
@@ -64,6 +66,7 @@ class CompareView(Selection):
             if column == 0:
                 tree.itemSelectionChanged.connect(self.paint_choice)
                 self.attach_menu(tree=tree, entries=(self.delete_assets_action, None, self.refresh_action))
+
             else:
                 tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
 
@@ -87,6 +90,7 @@ class CompareView(Selection):
     def toggle_compare(self) -> None:
         if self.comparing:
             self.stop_compare()
+
         else:
             self.start_compare()
 
@@ -122,15 +126,17 @@ class CompareView(Selection):
 
             return
 
-        key = (job.asset_list, job.compare_list, self.tag)
+        key = CompareStamp(assets=job.asset_list, compared=job.compare_list, tag=self.tag)
 
         if key == self.shown_compare:
             return
 
         self.shown_compare = key
-        left, right = uploader.compare.compare_releases(left=job.assets, right=job.compare_assets)
+        comparison = uploader.compare.compare_releases(left=job.assets, right=job.compare_assets)
+        left = comparison.left
+        right = comparison.right
 
-        for index, (tag, rows) in enumerate(((self.tag, left), (job.compare_tag, right))):
+        for index, (tag, rows) in enumerate(iterable=((self.tag, left), (job.compare_tag, right))):
             self.compare_titles[index].setText(f"Release {tag}")
             counts = collections.Counter(row.state for row in rows)
 
@@ -140,7 +146,7 @@ class CompareView(Selection):
             self.fill_compare(tree=self.compare_trees[index], rows=rows)
 
     @staticmethod
-    def fill_compare(tree: QTreeWidget, rows: list[CompareRow]) -> None:
+    def fill_compare(tree: QTreeWidget, rows: List[CompareRow]) -> None:
         top = tree.verticalScrollBar().value()
         tree.setSortingEnabled(False)
         tree.clear()

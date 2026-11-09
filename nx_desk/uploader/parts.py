@@ -1,28 +1,28 @@
 import functools
 import re
 import shutil
-from collections.abc import Collection, Iterable
 from pathlib import Path
+from typing import Collection, Dict, Iterable, List
 
-from ..names import format_size
 from ..schemas.common import Progress, Report
-from ..schemas.github import Asset
+from ..schemas.github import Asset, UploadPart
 from ..utils.callbacks import offset, quiet
 from ..utils.files import sha256_of
+from ..utils.sizes import format_size
 from . import archive, command, progress, releases, upload
 
 PART_SUFFIX = re.compile(pattern=r"\.\d{3}$")
 
 
 # Files of one folder whatever version they carry, so a new version replaces the old file.
-def owned_assets(stem: str, assets: dict[str, Asset]) -> dict[str, Asset]:
+def owned_assets(stem: str, assets: Dict[str, Asset]) -> Dict[str, Asset]:
     pattern = re.compile(pattern=rf"^{re.escape(pattern=stem)}(-(v?\d|miss)[A-Za-z0-9._-]*)?\.zip(\.\d{{3}})?$")
 
     return {name: asset for name, asset in assets.items() if pattern.match(string=name)}
 
 
 # One folder may be several parts on the release, and a part alone is useless.
-def with_sibling_parts(names: Collection[str], all_names: Iterable[str]) -> list[str]:
+def with_sibling_parts(names: Collection[str], all_names: Iterable[str]) -> List[str]:
     stems = {PART_SUFFIX.sub(repl="", string=name) for name in names}
 
     return [name for name in all_names if name in names or PART_SUFFIX.sub(repl="", string=name) in stems]
@@ -42,15 +42,15 @@ def games_text(assets: Iterable[Asset]) -> str:
 def download_group(
     repo: str,
     tag: str,
-    names: list[str],
-    assets: dict[str, Asset],
+    names: List[str],
+    assets: Dict[str, Asset],
     place: Path,
     report: Report = quiet,
     moved: Progress = quiet,
 ) -> Path:
     before = 0
 
-    for index, name in enumerate(names, 1):
+    for index, name in enumerate(iterable=names, start=1):
         size = assets[name].size or 0
         report(f"downloading {name} ({format_size(value=size)}, {index}/{len(names)})")
         arguments = ("release", "download", tag, "--repo", repo, "--pattern", name, "--dir", str(place))
@@ -63,6 +63,7 @@ def download_group(
                 name=name,
                 partial=place / name,
             )
+
         finally:
             finished.set()
 
@@ -80,9 +81,9 @@ def download_group(
     if len(names) > 1 or names[0] != target.name:
         report(f"joining {len(names)} parts into {target.name}")
 
-        with open(target, "wb") as output:
+        with open(file=target, mode="wb") as output:
             for name in sorted(names):
-                with open(place / name, "rb") as reader:
+                with open(file=place / name, mode="rb") as reader:
                     shutil.copyfileobj(fsrc=reader, fdst=output, length=archive.BLOCK)
 
                 (place / name).unlink()
@@ -97,16 +98,16 @@ def upload_parts(
     repo: str,
     tag: str,
     stem: str,
-    parts: list[Path],
-    assets: dict[str, Asset],
+    parts: List[Path],
+    assets: Dict[str, Asset],
     report: Report = quiet,
     label: str = "",
     moved: Progress = quiet,
 ) -> None:
-    uploads: list[tuple[str, Path]] = []
+    uploads: List[UploadPart] = []
     before = 0
 
-    for index, part in enumerate(parts, 1):
+    for index, part in enumerate(iterable=parts, start=1):
         temp = part.with_name(name=archive.TEMP_PREFIX + part.name)
         part.rename(target=temp)
         size = temp.stat().st_size
@@ -120,12 +121,14 @@ def upload_parts(
             moved=offset(moved=moved, before=before),
         )
         before += size
-        uploads.append((part.name, temp))
+        uploads.append(UploadPart(name=part.name, path=temp))
 
     report("checking SHA-256 of the files on GitHub")
     fresh = releases.remote_assets(repo=repo, tag=tag)
 
-    for name, temp in uploads:
+    for upload_part in uploads:
+        name, temp = upload_part.name, upload_part.path
+
         if fresh[temp.name].digest != f"sha256:{sha256_of(path=temp)}":
             raise command.GhError(f"{name}: file on GitHub does not match, the old copy is kept")
 
@@ -140,8 +143,9 @@ def upload_parts(
         for asset in old.values():
             releases.delete_asset(repo=repo, asset=asset)
 
-        for name, temp in uploads:
+        for upload_part in uploads:
+            name, temp = upload_part.name, upload_part.path
             fields = ["-f", f"name={name}"] + (["-f", f"label={label}"] if label else [])
             command.gh("api", "-X", "PATCH", f"repos/{repo}/releases/assets/{fresh[temp.name].id}", *fields)
 
-    report(f"named {', '.join(name for name, _ in uploads)} on GitHub" + (f", labelled {label}" if label else ""))
+    report(f"named {', '.join(part.name for part in uploads)} on GitHub" + (f", labelled {label}" if label else ""))

@@ -1,20 +1,26 @@
 import hashlib
 import http.client
-import json
+import re
 import shutil
 import subprocess
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Optional, Tuple
 
 from .. import config as settings
 from .. import net, system
-from ..catalog.values import https_or_empty
 from ..config import ASSET_DIGEST, CHUNK, MAX_UPDATE, VERSION_KEY
-from ..names import parse_version
+from ..schemas.api import ReleasePayload
 from ..schemas.update import AppAsset, AppUpdate, UpdateJob
 from ..system import asset_name, extract_program, swap_program
+from ..utils.urls import https_or_empty
 from .base import VaultBase
+
+
+def parse_version(text: object) -> Optional[Tuple[int, ...]]:
+    match = re.fullmatch(pattern=r"v?(\d+)\.(\d+)\.(\d+)", string=str(text).strip())
+
+    return tuple(int(part) for part in match.groups()) if match else None
 
 
 class AppUpdates(VaultBase):
@@ -28,8 +34,9 @@ class AppUpdates(VaultBase):
 
         try:
             release = self._latest_release(url=url)
-            latest = parse_version(text=release["tag_name"])
-            page = https_or_empty(value=release.get("html_url"))
+            latest = parse_version(text=release.tag_name)
+            page = https_or_empty(value=release.html_url)
+
         except (
             OSError,
             ValueError,
@@ -50,22 +57,22 @@ class AppUpdates(VaultBase):
             return "error"
 
         with self.lock:
-            self.app_update = AppUpdate(tag=release["tag_name"], url=page, asset=self.pick_asset(release=release))
+            self.app_update = AppUpdate(tag=release.tag_name, url=page, asset=self.pick_asset(release=release))
 
         return "available"
 
     @staticmethod
-    def _latest_release(url: str) -> dict[str, Any]:
+    def _latest_release(url: str) -> ReleasePayload:
         with net.http_get(url=url, headers={"Accept": "application/vnd.github+json"}) as response:
-            return json.loads(s=response.read())
+            return ReleasePayload.model_validate_json(json_data=response.read())
 
     @staticmethod
-    def pick_asset(release: dict[str, Any]) -> AppAsset | None:
-        for asset in release.get("assets") or []:
-            if isinstance(asset, dict) and asset.get("name") == asset_name():
-                url = asset.get("browser_download_url")
-                size = asset.get("size")
-                digest = asset.get("digest")
+    def pick_asset(release: ReleasePayload) -> Optional[AppAsset]:
+        for asset in release.assets:
+            if asset.name == asset_name():
+                url = asset.browser_download_url
+                size = asset.size
+                digest = asset.digest
 
                 if (
                     isinstance(url, str)
@@ -93,7 +100,7 @@ class AppUpdates(VaultBase):
     def _stream_download(self, asset: AppAsset, path: Path) -> None:
         done = 0
 
-        with net.http_get(url=asset.url) as response, open(path, "wb") as handle:
+        with net.http_get(url=asset.url) as response, open(file=path, mode="wb") as handle:
             for block in iter(lambda: response.read(CHUNK), b""):
                 done += len(block)
 
@@ -108,7 +115,7 @@ class AppUpdates(VaultBase):
         digest = hashlib.sha256()
         size = 0
 
-        with open(path, "rb") as handle:
+        with open(file=path, mode="rb") as handle:
             for block in iter(lambda: handle.read(CHUNK), b""):
                 size += len(block)
                 digest.update(block)
@@ -139,6 +146,7 @@ class AppUpdates(VaultBase):
                 program=program,
             )
             self.set_update_job(phase="done")
+
         except (
             OSError,
             ValueError,
@@ -148,5 +156,6 @@ class AppUpdates(VaultBase):
             http.client.HTTPException,
         ) as error:
             self.set_update_job(phase="error", message=str(error) or type(error).__name__)
+
         finally:
             shutil.rmtree(path=work, ignore_errors=True)

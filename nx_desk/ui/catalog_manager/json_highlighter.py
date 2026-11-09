@@ -1,4 +1,5 @@
 import re
+from typing import Dict
 
 from PySide6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat, QTextDocument
 
@@ -14,7 +15,7 @@ class JsonHighlighter(QSyntaxHighlighter):
 
     def __init__(self, document: QTextDocument) -> None:
         super().__init__(document)
-        self.formats: dict[str, QTextCharFormat] = {}
+        self.formats: Dict[str, QTextCharFormat] = {}
 
         for kind, color in self.COLORS.items():
             shown = QTextCharFormat()

@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-
 import os
 import re
 import shutil
 import subprocess
 import sys
 import zipfile
-from collections.abc import Iterable
 from importlib import metadata
 from pathlib import Path
+from typing import Iterable, Optional
 
 import PyInstaller.__main__
 
@@ -35,10 +34,10 @@ def write_build_config() -> Path:
 
     values = {key: config[key] for key in settings.CONFIG_KEYS}
     values.update({key: config[key] for key in settings.OPTIONAL_KEYS if config.get(key)})
-    values[settings.VERSION_KEY] = os.environ.get(settings.VERSION_KEY, "")
+    values[settings.VERSION_KEY] = os.environ.get(key=settings.VERSION_KEY, default="")
     generated = WORK / "generated"
     generated.mkdir(parents=True)
-    (generated / "nx_desk_build_config.py").write_text(f"VALUES = {values!r}\n", encoding="utf-8")
+    (generated / "nx_desk_build_config.py").write_text(data=f"VALUES = {values!r}\n", encoding="utf-8")
 
     return generated
 
@@ -82,18 +81,18 @@ def compile_app(generated: Path) -> None:
     PyInstaller.__main__.run(pyi_args=[*args, str(ROOT / "main.py")])
 
 
-def read_python_license() -> str | None:
+def read_python_license() -> Optional[str]:
     version = f"python{sys.version_info.major}.{sys.version_info.minor}"
     prefix = Path(sys.base_prefix)
 
     return first_text(paths=[prefix / "lib" / version / "LICENSE.txt", prefix / "LICENSE.txt", prefix / "LICENSE"])
 
 
-def first_text(paths: Iterable[Path]) -> str | None:
+def first_text(paths: Iterable[Path]) -> Optional[str]:
     return next((path.read_text(encoding="utf-8", errors="replace") for path in paths if path.is_file()), None)
 
 
-def read_package_licenses(name: str) -> str | None:
+def read_package_licenses(name: str) -> Optional[str]:
     distribution = metadata.distribution(distribution_name=name)
     files = [
         file
@@ -144,6 +143,7 @@ def stage(package: str) -> Path:
 
     if sys.platform == "darwin":
         subprocess.run(args=["ditto", str(output / f"{NAME}.app"), str(target / f"{NAME}.app")], check=True)
+
     else:
         binary = f"{NAME}.exe" if sys.platform == "win32" else NAME
         shutil.move(src=str(output / binary), dst=str(target / binary))
@@ -152,7 +152,7 @@ def stage(package: str) -> Path:
         (target / folder).mkdir()
 
     shutil.copy(src=ROOT / "LICENSE", dst=target / "LICENSE")
-    (target / "THIRD_PARTY_LICENSES.txt").write_text(third_party_licenses(), encoding="utf-8")
+    (target / "THIRD_PARTY_LICENSES.txt").write_text(data=third_party_licenses(), encoding="utf-8")
 
     return target
 

@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from typing import Callable
 
 
 # Stands in for any callback whose calls can be ignored, such as progress or report lines.

@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from typing import Callable, Optional, Tuple
 
 from PySide6.QtCore import QAbstractItemModel, QSize, Qt, QTimer
 from PySide6.QtGui import QHideEvent, QResizeEvent, QShowEvent
@@ -34,8 +34,8 @@ class CardGrid(QListView):
         # Always there, so its coming and going cannot change the width the cards are shared over.
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.setItemDelegate(CardDelegate(thumbs=thumbs, parent=self))
-        self.fitted: tuple[int, int] | None = None
-        self.signature: tuple[object, int] | None = None
+        self.fitted: Optional[Tuple[int, int]] = None
+        self.signature: Optional[Tuple[object, int]] = None
         self.timer = QTimer(self)
         self.timer.setInterval(REDRAW)
         self.timer.timeout.connect(self.redraw)
@@ -72,7 +72,7 @@ class CardGrid(QListView):
         self.timer.stop()
 
     # The rows in view and one row of cards after them.
-    def shown_rows(self, total: int) -> tuple[int, int]:
+    def shown_rows(self, total: int) -> Tuple[int, int]:
         viewport = self.viewport()
         self.fit_cells()
 

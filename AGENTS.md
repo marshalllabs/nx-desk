@@ -19,11 +19,11 @@
 | `make run` | Launch the PySide6 app |
 | `make check` | Print mod updates without opening the GUI |
 | `make test` | Run unit tests |
-| `make lint` | Ruff, formatting, block spacing, mypy and Pyright |
+| `make lint` | Ruff, formatting, mypy and Pyright |
 | `make format` | Apply style fixes and formatting |
 | `make build` | Build `dist/NXDesk-<platform>-<arch>.zip` |
-| `make clean` | Remove build output, `.venv/` and caches; preserve `.data/` |
-| `.venv/bin/python -B -m unittest tests.github.test_uploads` | Run one test module |
+| `make clean` | Remove build output and project bytecode caches; preserve `.venv/` and `.data/` |
+| `.venv/bin/python -B -m tests.run tests.github.test_uploads` | Run one test module |
 
 ## Code map
 
@@ -32,7 +32,7 @@
 
 | Path | Responsibility |
 | --- | --- |
-| `utils/` | Generic standard-library helpers, one file per topic |
+| `utils/` | Small reusable project helpers, one file per topic |
 | `schemas/` | Shared Pydantic models and aliases, grouped by area |
 | `config.py`, `net.py`, `system.py` | Configuration, HTTP and OS-specific operations |
 | `credentials.py`, `steamgriddb.py` | Secret storage and artwork service access |
@@ -48,13 +48,15 @@
 - Use four spaces, a 120-character target, `snake_case` names and `PascalCase` classes.
 - Use short comments when needed; do not add docstrings.
 - Fully type parameters, returns and attributes; use Pydantic models for shared structured data.
+- Use collection annotations, `Optional` and `Union` from `typing`; avoid built-in generics and `|` in annotations.
 - Read model fields as attributes, construct with keywords and copy changes with `model_copy(update=...)`.
 - Mutable job/state models use `validate_assignment`; persisted models use `Vault._load_model` and `TypeAdapter`.
 - Validate external data at entry points; use `cast` only after checking it, with a reason.
 - Pass keyword arguments when supported; preserve real parameter names in test fakes.
 - Separate control blocks with blank lines; split multiline brackets one item per line with trailing commas.
-  - `scripts/space_blocks.py` enforces spacing; Ruff's `COM812` formatter warning is expected.
-- Keep generic helpers in `utils/<topic>.py`, using only the standard library and no project imports.
+  - Ruff's `COM812` formatter warning is expected.
+- Keep small reusable helpers in `utils/<topic>.py`; project and third-party imports are allowed.
+  Avoid circular imports; helpers used by only one module stay with that module.
 - Import names from their defining modules; use `TYPE_CHECKING` for type-only cycles.
 - Keep `__init__.py` empty except for the existing `vault` mixin assembly and `uploader` module imports.
 - Call patchable dependencies through their modules: `net.http_get`, `settings.load_config`, `uploader.command.gh`.
@@ -122,6 +124,8 @@
 
 - Use `unittest` and `unittest.mock`; mock network/GitHub calls and cover changed behavior and failure paths.
 - Reuse `tests/helpers.py` fixtures and each area's `case.py`; run tests from the repository root.
+- Use `make test` or `python -B -m tests.run [module ...]` so configuration, keyring and external I/O
+  are isolated before discovery. Use ordinary fixture filenames, never secret-file names.
 - Run `make test` and `make lint` for code changes; tool settings live in their own configuration files.
 - For UI changes, load the required skill and preserve `ui/theme.py` tokens, shared widgets and accessibility.
 - Describe behavior and validation in reviews; consult the code and README for detailed feature behavior.

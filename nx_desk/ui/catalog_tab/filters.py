@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from typing import Iterable
 
 from ..rows import picked_text
 from ..theme import STATUS_FILTERS
@@ -29,6 +29,7 @@ class Filters(GameList):
     def toggle_genre(self, genre: str, selected: bool) -> None:
         if selected:
             self.selected_genres.add(genre)
+
         else:
             self.selected_genres.discard(genre)
 
@@ -50,10 +51,10 @@ class Filters(GameList):
     def set_filter(self, names: Iterable[str]) -> None:
         self.status_filter = set(names)
         self.status_popup.set_choices(
-            choices=[(name, text) for name, (text, _) in STATUS_FILTERS.items()],
+            choices=[(name, row.label) for name, row in STATUS_FILTERS.items()],
             picked=self.status_filter,
         )
-        texts = [text for name, (text, _) in STATUS_FILTERS.items() if name in self.status_filter]
+        texts = [row.label for name, row in STATUS_FILTERS.items() if name in self.status_filter]
         self.status_button.setText(picked_text(title="Status", picked=texts))
         self.view_switch.show_view(view="list")
         self.rebuild_rows()

@@ -1,8 +1,12 @@
-import json
 import re
+from typing import Dict, List
 from urllib.parse import quote
 
+from pydantic import JsonValue, TypeAdapter
+
+from ..schemas.api import ReleasePayload, RepositoryPayload
 from ..schemas.github import Asset, Repo
+from ..utils.json import parse_json
 from . import archive, command
 
 REPO_NAME = re.compile(pattern=r"^[\w.-]+/[\w.-]+$")
@@ -12,26 +16,27 @@ TAG_GONE = re.compile(pattern=r"HTTP 404|HTTP 422|Reference does not exist|Not F
 
 # Every repository the user owns, works on with others or reaches through an organization, so two of
 # the same name under different owners both show.
-def list_repos() -> list[Repo]:
-    pages = json.loads(s=command.gh("api", "--paginate", "--slurp", "user/repos?per_page=100"))
-    repos = []
+def list_repos() -> List[Repo]:
+    pages = PAGES.validate_python(
+        parse_json(text=command.gh("api", "--paginate", "--slurp", "user/repos?per_page=100")),
+    )
+    repos: List[Repo] = []
 
-    for row in (row for page in pages for row in page if isinstance(row, dict)):
-        full_name = row.get("full_name")
+    for raw in (row for page in pages for row in page if isinstance(row, dict)):
+        row = RepositoryPayload.model_validate(obj=raw)
 
-        if not isinstance(full_name, str) or not REPO_NAME.match(string=full_name):
+        if not REPO_NAME.match(string=row.full_name):
             continue
 
-        owner = row.get("owner")
-        fields = {
-            "name": row.get("name"),
-            "owner": owner.get("login") if isinstance(owner, dict) else None,
-            "visibility": row.get("visibility"),
-            "description": row.get("description"),
-            "updated_at": row.get("updated_at"),
-        }
         repos.append(
-            Repo(full_name=full_name, **{key: value for key, value in fields.items() if isinstance(value, str)}),
+            Repo(
+                full_name=row.full_name,
+                name=row.name,
+                owner=row.owner.login if row.owner else "",
+                visibility=row.visibility,
+                description=row.description,
+                updated_at=row.updated_at,
+            ),
         )
 
     return sorted(repos, key=lambda repo: repo.full_name.casefold())
@@ -39,15 +44,16 @@ def list_repos() -> list[Repo]:
 
 def latest_release(repo: str) -> str:
     try:
-        return json.loads(s=command.gh("api", f"repos/{repo}/releases/latest"))["tag_name"]
+        return ReleasePayload.model_validate_json(json_data=command.gh("api", f"repos/{repo}/releases/latest")).tag_name
+
     except command.GhError:
         return ""
 
 
-def list_releases(repo: str) -> list[str]:
-    pages = json.loads(s=command.gh("api", "--paginate", "--slurp", f"repos/{repo}/releases?per_page=100"))
+def list_releases(repo: str) -> List[str]:
+    pages = RELEASES.validate_json(command.gh("api", "--paginate", "--slurp", f"repos/{repo}/releases?per_page=100"))
 
-    return [release["tag_name"] for page in pages for release in page]
+    return [release.tag_name for page in pages for release in page]
 
 
 def create_release(repo: str, tag: str) -> None:
@@ -62,7 +68,8 @@ def rename_release(repo: str, tag: str, new_tag: str) -> None:
 # the tag is its own, so this removes it. True when the tag is gone, whether it was removed now or already.
 def delete_tag(repo: str, tag: str) -> bool:
     try:
-        command.gh("api", "-X", "DELETE", f"repos/{repo}/git/refs/tags/{quote(tag, safe='')}")
+        command.gh("api", "-X", "DELETE", f"repos/{repo}/git/refs/tags/{quote(string=tag, safe='')}")
+
     except command.GhError as error:
         return bool(TAG_GONE.search(string=str(error)))
 
@@ -73,18 +80,19 @@ def delete_release(repo: str, tag: str) -> None:
     command.gh("release", "delete", tag, "--repo", repo, "--yes", "--cleanup-tag")
 
 
-def remote_assets(repo: str, tag: str) -> dict[str, Asset]:
-    release = json.loads(s=command.gh("api", f"repos/{repo}/releases/tags/{tag}"))
-    pages = json.loads(
-        s=command.gh("api", "--paginate", "--slurp", f"repos/{repo}/releases/{release['id']}/assets?per_page=100"),
+def remote_assets(repo: str, tag: str) -> Dict[str, Asset]:
+    release = ReleasePayload.model_validate_json(json_data=command.gh("api", f"repos/{repo}/releases/tags/{tag}"))
+    pages = ASSETS.validate_json(
+        command.gh("api", "--paginate", "--slurp", f"repos/{repo}/releases/{release.id}/assets?per_page=100"),
     )
 
-    return {asset["name"]: Asset.model_validate(asset) for page in pages for asset in page}
+    return {asset.name: asset for page in pages for asset in page}
 
 
 def delete_asset(repo: str, asset: Asset) -> None:
     try:
         command.gh("api", "-X", "DELETE", f"repos/{repo}/releases/assets/{asset.id}")
+
     except command.GhError as error:
         # Already gone, such as when a try that GitHub reported as failed did delete it.
         if "HTTP 404" not in str(error):
@@ -92,7 +100,7 @@ def delete_asset(repo: str, asset: Asset) -> None:
 
 
 # Files left under a temporary name by an upload that stopped halfway.
-def delete_leftovers(repo: str, tag: str) -> list[str]:
+def delete_leftovers(repo: str, tag: str) -> List[str]:
     leftovers = [
         asset for name, asset in remote_assets(repo=repo, tag=tag).items() if name.startswith(archive.TEMP_PREFIX)
     ]
@@ -101,3 +109,8 @@ def delete_leftovers(repo: str, tag: str) -> list[str]:
         delete_asset(repo=repo, asset=asset)
 
     return [asset.name for asset in leftovers]
+
+
+PAGES: TypeAdapter[List[List[JsonValue]]] = TypeAdapter(type=List[List[JsonValue]])
+RELEASES: TypeAdapter[List[List[ReleasePayload]]] = TypeAdapter(type=List[List[ReleasePayload]])
+ASSETS: TypeAdapter[List[List[Asset]]] = TypeAdapter(type=List[List[Asset]])

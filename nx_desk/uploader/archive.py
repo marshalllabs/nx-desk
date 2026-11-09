@@ -3,6 +3,7 @@ import shutil
 import unicodedata
 import zipfile
 from pathlib import Path
+from typing import List
 
 from ..schemas.common import Progress
 from ..utils.callbacks import quiet
@@ -20,7 +21,7 @@ BLOCK = 1024 * 1024
 # GitHub rewrites spaces and brackets in asset names, so names are made safe up front.
 def asset_stem(name: str) -> str:
     text = unicodedata.normalize("NFKD", name.replace("đ", "d").replace("Đ", "D"))
-    text = text.encode("ascii", "ignore").decode("ascii")
+    text = text.encode(encoding="ascii", errors="ignore").decode(encoding="ascii")
 
     return re.sub(pattern=r"[^A-Za-z0-9]+", repl="-", string=text).strip("-") or "folder"
 
@@ -60,7 +61,7 @@ def build_zip(folder: Path, target: Path, moved: Progress = quiet) -> None:
                 output.writestr(zinfo_or_arcname=info, data=b"")
                 continue
 
-            with open(path, "rb") as reader, output.open(name=info, mode="w", force_zip64=True) as writer:
+            with open(file=path, mode="rb") as reader, output.open(name=info, mode="w", force_zip64=True) as writer:
                 for block in iter(lambda: reader.read(BLOCK), b""):
                     command.stop_point()
                     writer.write(block)
@@ -68,19 +69,19 @@ def build_zip(folder: Path, target: Path, moved: Progress = quiet) -> None:
                     moved(done)
 
 
-def split_file(path: Path, part_size: int, moved: Progress = quiet) -> list[Path]:
+def split_file(path: Path, part_size: int, moved: Progress = quiet) -> List[Path]:
     if path.stat().st_size <= part_size:
         return [path]
 
-    parts: list[Path] = []
+    parts: List[Path] = []
     done = 0
 
-    with open(path, "rb") as reader:
+    with open(file=path, mode="rb") as reader:
         while True:
             part = path.with_name(name=f"{path.name}.{len(parts) + 1:03d}")
             written = 0
 
-            with open(part, "wb") as writer:
+            with open(file=part, mode="wb") as writer:
                 while written < part_size:
                     command.stop_point()
                     block = reader.read(min(BLOCK, part_size - written))
@@ -107,7 +108,7 @@ def split_file(path: Path, part_size: int, moved: Progress = quiet) -> list[Path
 # Every upload holds one folder. A folder of the same name stays, the new one gets a number.
 def extract_folder(archive: Path, root: Path, place: Path) -> str:
     with zipfile.ZipFile(file=archive) as source:
-        tops = {name.split("/")[0] for name in source.namelist()}
+        tops = {name.split(sep="/")[0] for name in source.namelist()}
 
         if len(tops) != 1 or not next(iter(tops)) or ".." in tops:
             raise command.GhError("zip does not contain exactly one top folder")

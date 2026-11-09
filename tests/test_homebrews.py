@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Tuple
 from unittest import mock
 
 from nx_desk import config, net
@@ -30,33 +31,33 @@ DATA = {
 class HomebrewParsingTests(unittest.TestCase):
     def test_parses_metadata(self) -> None:
         rows = parse_homebrews(data=DATA)
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].groups, ["Applications", "Plugins"])
-        self.assertEqual(rows[0].description, "Manage local files")
-        self.assertEqual(rows[0].authors, "Example Author")
+        self.assertEqual(first=len(rows), second=1)
+        self.assertEqual(first=rows[0].groups, second=["Applications", "Plugins"])
+        self.assertEqual(first=rows[0].description, second="Manage local files")
+        self.assertEqual(first=rows[0].authors, second="Example Author")
 
     def test_drops_invalid_entries_and_duplicate_ids(self) -> None:
         row = DATA["homebrews"][0]
         data = {"homebrews": [None, {}, {"id": "no-name"}, row, row]}
-        self.assertEqual(len(parse_homebrews(data=data)), 1)
+        self.assertEqual(first=len(parse_homebrews(data=data)), second=1)
 
     def test_sanitizes_links_and_groups(self) -> None:
         row = {**DATA["homebrews"][0], "url": "javascript:alert(1)", "groups": [None, 1, "Games", " Games "]}
         result = parse_homebrews(data={"homebrews": [row]})[0]
-        self.assertEqual(result.url, "")
-        self.assertEqual(result.groups, ["Games"])
+        self.assertEqual(first=result.url, second="")
+        self.assertEqual(first=result.groups, second=["Games"])
 
     def test_search_matches_all_words_across_fields(self) -> None:
         rows = parse_homebrews(data=DATA)
-        self.assertEqual(find_homebrews(rows=rows, query="files author plugins"), rows)
-        self.assertEqual(find_homebrews(rows=rows, query="files missing"), [])
-        self.assertEqual(find_homebrews(rows=rows, query=" "), rows)
+        self.assertEqual(first=find_homebrews(rows=rows, query="files author plugins"), second=rows)
+        self.assertEqual(first=find_homebrews(rows=rows, query="files missing"), second=[])
+        self.assertEqual(first=find_homebrews(rows=rows, query=" "), second=rows)
 
     def test_invalid_document_shapes_are_empty(self) -> None:
-        shapes: tuple[object, ...] = (None, [], {}, {"homebrews": "invalid"})
+        shapes: Tuple[object, ...] = (None, [], {}, {"homebrews": "invalid"})
 
         for shape in shapes:
-            self.assertEqual(parse_homebrews(data=shape), [])
+            self.assertEqual(first=parse_homebrews(data=shape), second=[])
 
 
 class HomebrewCacheTests(unittest.TestCase):
@@ -68,8 +69,8 @@ class HomebrewCacheTests(unittest.TestCase):
         self.path = self.store.cache_dir / HOMEBREWS_FILE
         self.raw = json.dumps(obj=DATA).encode()
         settings = mock.patch.object(
-            config,
-            "load_config",
+            target=config,
+            attribute="load_config",
             return_value={HOMEBREWS_KEY: "https://example.com/feed.json"},
         )
         settings.start()
@@ -82,63 +83,66 @@ class HomebrewCacheTests(unittest.TestCase):
         return response
 
     def test_fetches_valid_data_and_reuses_fresh_cache(self) -> None:
-        with mock.patch.object(net, "http_get", return_value=self.response(raw=self.raw)) as fetch:
+        with mock.patch.object(target=net, attribute="http_get", return_value=self.response(raw=self.raw)) as fetch:
             self.store.load_homebrews()
             self.store.load_homebrews()
 
-        self.assertEqual(fetch.call_count, 1)
-        self.assertEqual(self.path.read_bytes(), self.raw)
-        self.assertEqual(len(self.store.homebrew_snapshot().rows), 1)
-        self.assertFalse(self.store.homebrew_snapshot().loading)
-        self.assertEqual(self.store.homebrew_snapshot().error, "")
+        self.assertEqual(first=fetch.call_count, second=1)
+        self.assertEqual(first=self.path.read_bytes(), second=self.raw)
+        self.assertEqual(first=len(self.store.homebrew_snapshot().rows), second=1)
+        self.assertFalse(expr=self.store.homebrew_snapshot().loading)
+        self.assertEqual(first=self.store.homebrew_snapshot().error, second="")
 
     def test_failed_refresh_keeps_cached_rows_and_file(self) -> None:
         self.path.write_bytes(data=self.raw)
 
-        with mock.patch.object(net, "http_get", side_effect=OSError("offline")):
+        with mock.patch.object(target=net, attribute="http_get", side_effect=OSError("offline")):
             self.store.load_homebrews(force=True)
 
         snapshot = self.store.homebrew_snapshot()
-        self.assertEqual(len(snapshot.rows), 1)
-        self.assertEqual(snapshot.error, "offline")
-        self.assertFalse(snapshot.loading)
-        self.assertEqual(self.path.read_bytes(), self.raw)
+        self.assertEqual(first=len(snapshot.rows), second=1)
+        self.assertEqual(first=snapshot.error, second="offline")
+        self.assertFalse(expr=snapshot.loading)
+        self.assertEqual(first=self.path.read_bytes(), second=self.raw)
 
     def test_empty_and_invalid_responses_do_not_replace_cache(self) -> None:
         self.path.write_bytes(data=self.raw)
 
         for raw in (b'{"homebrews": []}', b"not JSON"):
-            with mock.patch.object(net, "http_get", return_value=self.response(raw=raw)):
+            with mock.patch.object(target=net, attribute="http_get", return_value=self.response(raw=raw)):
                 self.store.load_homebrews(force=True)
 
-            self.assertEqual(self.path.read_bytes(), self.raw)
-            self.assertTrue(self.store.homebrew_snapshot().error)
+            self.assertEqual(first=self.path.read_bytes(), second=self.raw)
+            self.assertTrue(expr=self.store.homebrew_snapshot().error)
 
     def test_oversized_response_is_rejected(self) -> None:
         with (
-            mock.patch("nx_desk.vault.homebrews.MAX_CATALOG", 10),
+            mock.patch(target="nx_desk.vault.homebrews.MAX_CATALOG", new=10),
             mock.patch.object(
-                net,
-                "http_get",
+                target=net,
+                attribute="http_get",
                 return_value=self.response(raw=b"x" * 11),
             ),
         ):
             self.store.load_homebrews(force=True)
 
-        self.assertIn("too large", self.store.homebrew_snapshot().error)
-        self.assertFalse(self.path.exists())
+        self.assertIn(member="too large", container=self.store.homebrew_snapshot().error)
+        self.assertFalse(expr=self.path.exists())
 
     def test_missing_feed_reports_configuration_error(self) -> None:
-        with mock.patch.object(config, "load_config", return_value={}), mock.patch.object(net, "http_get") as fetch:
+        with (
+            mock.patch.object(target=config, attribute="load_config", return_value={}),
+            mock.patch.object(target=net, attribute="http_get") as fetch,
+        ):
             self.store.load_homebrews()
 
         fetch.assert_not_called()
-        self.assertIn("not configured", self.store.homebrew_snapshot().error)
+        self.assertIn(member="not configured", container=self.store.homebrew_snapshot().error)
 
     def test_concurrent_refresh_does_not_start_another_request(self) -> None:
         self.store.homebrew_loading = True
 
-        with mock.patch.object(net, "http_get") as fetch:
+        with mock.patch.object(target=net, attribute="http_get") as fetch:
             self.store.load_homebrews(force=True)
 
         fetch.assert_not_called()
@@ -146,13 +150,13 @@ class HomebrewCacheTests(unittest.TestCase):
     def test_view_setting_is_saved_independently(self) -> None:
         self.store.set_homebrews_view(view="grid")
         reloaded = Vault(base=self.base)
-        self.assertEqual(reloaded.homebrews_view, "grid")
-        self.assertEqual(reloaded.ports_view, "list")
+        self.assertEqual(first=reloaded.homebrews_view, second="grid")
+        self.assertEqual(first=reloaded.ports_view, second="list")
 
 
 class HomebrewConfigTests(unittest.TestCase):
     def test_homebrews_feed_is_an_optional_environment_setting(self) -> None:
-        self.assertIn(HOMEBREWS_KEY, config.OPTIONAL_KEYS)
+        self.assertIn(member=HOMEBREWS_KEY, container=config.OPTIONAL_KEYS)
 
-        with mock.patch.dict(os.environ, {HOMEBREWS_KEY: "https://example.com/homebrews.json"}):
-            self.assertEqual(config.load_config()[HOMEBREWS_KEY], "https://example.com/homebrews.json")
+        with mock.patch.dict(in_dict=os.environ, values={HOMEBREWS_KEY: "https://example.com/homebrews.json"}):
+            self.assertEqual(first=config.load_config()[HOMEBREWS_KEY], second="https://example.com/homebrews.json")

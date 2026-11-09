@@ -1,3 +1,5 @@
+from typing import Union
+
 from PySide6.QtCore import (
     QModelIndex,
     QPersistentModelIndex,
@@ -21,7 +23,7 @@ class ChipDelegate(QStyledItemDelegate):
         self,
         painter: QPainter,
         option: QStyleOptionViewItem,
-        index: QModelIndex | QPersistentModelIndex,
+        index: Union[QModelIndex, QPersistentModelIndex],
     ) -> None:
         style = QStyleOptionViewItem(option)
         self.initStyleOption(style, index)
@@ -44,7 +46,7 @@ class ChipDelegate(QStyledItemDelegate):
         x = option.rect.left() + 8
         right = option.rect.right() - 8
 
-        for number, tag in enumerate(tags):
+        for number, tag in enumerate(iterable=tags):
             width = metrics.horizontalAdvance(tag) + 12
             rest = len(tags) - number
             more = metrics.horizontalAdvance(f"+{rest}") + 12

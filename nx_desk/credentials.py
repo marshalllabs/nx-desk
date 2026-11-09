@@ -15,7 +15,7 @@ KEY_SIZE = 32
 
 # One entry per data folder, so two copies of the app keep their own secrets.
 def account(name: str, folder: Path) -> str:
-    digest = hashlib.sha256(str(folder.resolve()).encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha256(string=str(folder.resolve()).encode(encoding="utf-8")).hexdigest()[:12]
 
     return f"{name}@{digest}"
 
@@ -29,14 +29,15 @@ def folder_key(folder: Path) -> bytes:
 
         if len(saved) == KEY_SIZE:
             return saved
+
     except (OSError, ValueError):
         pass
 
-    fresh = secrets.token_bytes(KEY_SIZE)
+    fresh = secrets.token_bytes(nbytes=KEY_SIZE)
     folder.mkdir(parents=True, exist_ok=True)
-    handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    handle = os.open(path=path, flags=os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode=0o600)
 
-    with os.fdopen(handle, "w", encoding="utf-8") as file:
+    with os.fdopen(fd=handle, mode="w", encoding="utf-8") as file:
         file.write(fresh.hex() + "\n")
 
     return fresh
@@ -46,23 +47,26 @@ def folder_key(folder: Path) -> bytes:
 # means the keyring cannot be used here.
 def keyring_set(user: str, value: str) -> bool:
     try:
-        keyring.set_password(SERVICE, user, value)
+        keyring.set_password(service_name=SERVICE, username=user, password=value)
 
-        return keyring.get_password(SERVICE, user) == value
+        return keyring.get_password(service_name=SERVICE, username=user) == value
+
     except Exception:
         return False
 
 
 def keyring_get(user: str) -> str:
     try:
-        return keyring.get_password(SERVICE, user) or ""
+        return keyring.get_password(service_name=SERVICE, username=user) or ""
+
     except Exception:
         return ""
 
 
 def keyring_delete(user: str) -> None:
     try:
-        keyring.delete_password(SERVICE, user)
+        keyring.delete_password(service_name=SERVICE, username=user)
+
     except Exception:
         pass
 
@@ -91,6 +95,7 @@ def load_secret(name: str, stored: StoredSecret, folder: Path) -> str:
     if stored.place == "sealed" and stored.sealed:
         try:
             return unseal(key=folder_key(folder=folder), sealed=stored.sealed)
+
         except ValueError:
             return ""
 

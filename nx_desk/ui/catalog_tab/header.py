@@ -1,5 +1,6 @@
 import threading
 from datetime import datetime
+from typing import Optional
 
 from PySide6.QtWidgets import (
     QLabel,
@@ -118,7 +119,7 @@ class Header(GameList, Actions):
             chooser(widget=self.catalog_button, text=text, tip="Choose or manage the catalogs")
 
     # Switches to a catalog and reads it again; False when a download is running, which it must not disturb.
-    def switch_catalog(self, folder: str, parent: QWidget | None = None) -> bool:
+    def switch_catalog(self, folder: str, parent: Optional[QWidget] = None) -> bool:
         if self.vault.busy():
             show_message(
                 title="Downloading",
@@ -148,6 +149,7 @@ class Header(GameList, Actions):
         if snapshot.checking:
             self.summary.setText("")
             self.summary_spinner.start(text="Refreshing catalog…")
+
         else:
             self.summary_spinner.stop()
             self.summary.setText(" · ".join(parts) if self.vault.catalog else "No catalog")
@@ -174,8 +176,10 @@ class Header(GameList, Actions):
 
         if not self.vault.catalog:
             self.app.set_footer(text="Click the catalog button to add your first catalog")
+
         elif snapshot.error:
             self.app.set_footer(text="Could not refresh catalog: " + snapshot.error, error=True)
+
         else:
             # The path sits under Destination already; the footer only speaks for hints and errors.
             self.app.set_footer(text="")

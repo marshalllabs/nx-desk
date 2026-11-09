@@ -1,3 +1,5 @@
+from typing import Dict, List, Optional
+
 from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QAction, QBrush, QColor, QFont, QKeySequence
 from PySide6.QtWidgets import (
@@ -17,9 +19,9 @@ from .overlay import Overlay
 def paint_item(
     item: QTreeWidgetItem,
     columns: int,
-    foreground: str | None = None,
-    background: str | None = None,
-    only: int | None = None,
+    foreground: Optional[str] = None,
+    background: Optional[str] = None,
+    only: Optional[int] = None,
 ) -> None:
     # With only, the colour goes to that one column, such as the status, and the rest stays plain.
     for column in range(columns):
@@ -35,7 +37,7 @@ class LogPane(QTreeWidget):
     def __init__(self) -> None:
         super().__init__()
         self.count = 0
-        self.groups: dict[str, QTreeWidgetItem] = {}
+        self.groups: Dict[str, QTreeWidgetItem] = {}
         self.setColumnCount(3)
         self.setHeaderLabels(["Game / step", "Latest step", "Time"])
         self.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
@@ -81,7 +83,7 @@ class LogPane(QTreeWidget):
                 for column in range(3):
                     group.setFont(column, self.bold)
 
-    def paint(self, lines: list[LogEntry]) -> None:
+    def paint(self, lines: List[LogEntry]) -> None:
         self.empty.setVisible(not lines)
 
         if len(lines) == self.count:
@@ -95,7 +97,8 @@ class LogPane(QTreeWidget):
         bar = self.verticalScrollBar()
         following = bar.value() >= bar.maximum()
 
-        for level, time, game, text in lines[self.count :]:
+        for entry in lines[self.count :]:
+            level, time, game, text = entry.level, entry.time, entry.game, entry.text
             level = level if level in self.LEVELS else "info"
             color = QColor(COLORS[self.LEVELS[level]])
             line = QTreeWidgetItem([text, "", time])
@@ -113,6 +116,7 @@ class LogPane(QTreeWidget):
 
                 for column in range(3):
                     group.setFont(column, self.bold)
+
             else:
                 # The game that moved last goes to the bottom, so the end is the newest line.
                 opened = group.isExpanded()
@@ -146,7 +150,7 @@ class LogPane(QTreeWidget):
             walker += 1
 
     def copy(self) -> None:
-        found: list[str] = []
+        found: List[str] = []
         walker = QTreeWidgetItemIterator(self)
 
         while walker.value():

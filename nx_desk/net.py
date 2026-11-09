@@ -4,11 +4,13 @@ import ssl
 import sys
 import urllib.error
 import urllib.request
+from typing import Dict, Optional
+from urllib.parse import urlsplit
 
 from .config import user_agent
 
 
-def ssl_context() -> ssl.SSLContext | None:
+def ssl_context() -> Optional[ssl.SSLContext]:
     # System CA paths differ between distros, so packaged builds carry their own.
     if not getattr(sys, "frozen", False):
         return None
@@ -19,13 +21,21 @@ def ssl_context() -> ssl.SSLContext | None:
 
 
 SSL_CONTEXT = ssl_context()
-USER_AGENT = user_agent()
 
 
-def http_get(url: str, headers: dict[str, str] | None = None, timeout: int = 30) -> http.client.HTTPResponse:
-    request = urllib.request.Request(url=url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+def http_get(url: str, headers: Optional[Dict[str, str]] = None, timeout: int = 30) -> http.client.HTTPResponse:
+    if urlsplit(url=url).scheme not in ("http", "https"):
+        raise ValueError("HTTP requests require an HTTP or HTTPS URL")
 
-    return urllib.request.urlopen(url=request, timeout=timeout, context=SSL_CONTEXT)
+    request = urllib.request.Request(url=url, headers={"User-Agent": user_agent(), **(headers or {})})
+
+    response = urllib.request.urlopen(url=request, timeout=timeout, context=SSL_CONTEXT)
+
+    if not isinstance(response, http.client.HTTPResponse):
+        response.close()
+        raise TypeError("HTTP requests must return an HTTP response")
+
+    return response
 
 
 # A read waiting on a slow server only wakes up once its socket is shut down. Closing the
@@ -36,5 +46,6 @@ def abort(response: http.client.HTTPResponse) -> None:
     if isinstance(sock, socket.socket):
         try:
             sock.shutdown(socket.SHUT_RDWR)
+
         except OSError:
             pass

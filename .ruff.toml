@@ -1,11 +1,15 @@
 line-length = 120
-target-version = "py310"
+target-version = "py312"
 extend-exclude = ["dist"]
 
 [lint]
 # COM812 adds a trailing comma to any split bracket, so the formatter puts one item per line.
-select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM", "RUF", "PIE", "COM812"]
+select = ["E", "W", "F", "ANN", "I", "B", "UP", "C4", "SIM", "RUF", "PIE", "COM812"]
 ignore = [
+    "UP006", # use typing collection annotations
+    "UP007", # use typing.Union
+    "UP035", # keep collection annotations imported from typing
+    "UP045", # use typing.Optional
     "E501",   # line length is the formatter's job
     "RUF001", # flags Vietnamese text
     "RUF012", # mutable class attributes, a style choice

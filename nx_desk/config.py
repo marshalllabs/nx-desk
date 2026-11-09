@@ -2,6 +2,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Dict, Tuple
 
 from .schemas.catalog import ArtKind
 
@@ -39,7 +40,7 @@ PORTS_ART_FOLDER = "_ports"
 HOMEBREWS_ART_FOLDER = "_homebrews"
 PROGRAM_NAME = "NXDesk"
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
-ART_KINDS: tuple[ArtKind, ...] = ("cover", "background")
+ART_KINDS: Tuple[ArtKind, ...] = ("cover", "background")
 # SteamGridDB lookups, cached by game name; a game it did not have is asked again after this.
 ART_LOOKUPS_FILE = "steamgriddb.json"
 ART_LOOKUP_MAX_AGE = 30 * 24 * 3600
@@ -72,11 +73,12 @@ ASSET_DIGEST = re.compile(pattern=r"^sha256:[0-9a-f]{64}$")
 DISPLAY_VERSION = re.compile(pattern=r"v?\d+(?:\.\d+)*")
 
 
-def parse_dotenv(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
+def parse_dotenv(path: Path) -> Dict[str, str]:
+    values: Dict[str, str] = {}
 
     try:
         lines = Path(path).read_text(encoding="utf-8").splitlines()
+
     except OSError:
         return values
 
@@ -84,20 +86,21 @@ def parse_dotenv(path: Path) -> dict[str, str]:
         line = line.strip()
 
         if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
+            key, value = line.split(sep="=", maxsplit=1)
             values[key.strip()] = value.strip().strip("\"'")
 
     return values
 
 
-def load_config() -> dict[str, str]:
+def load_config() -> Dict[str, str]:
     # Later sources win: build-time values, then .env, then the environment.
-    values: dict[str, str] = {}
+    values: Dict[str, str] = {}
 
     try:
         import nx_desk_build_config  # pyright: ignore[reportMissingImports]
 
         values.update(nx_desk_build_config.VALUES)
+
     except ImportError:
         pass
 

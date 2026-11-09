@@ -1,3 +1,5 @@
+from typing import Tuple, Union
+
 from PySide6.QtCore import (
     QItemSelectionModel,
     Qt,
@@ -25,14 +27,14 @@ class GameList(Detail):
         self.rebuild_rows()
 
     def sort_list(self, column: int) -> None:
-        name = LIST_COLUMNS[column][0]
+        name = LIST_COLUMNS[column].key
 
         if name in LIST_SORTABLE:
             self.list_sort.toggle(column=name)
             self.model.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(LIST_COLUMNS) - 1)
             self.rebuild_rows()
 
-    def list_order(self, item: ModRow) -> tuple[int | str, int | str]:
+    def list_order(self, item: ModRow) -> Tuple[Union[int, str], Union[int, str]]:
         name = clean_game_name(name=item.name).casefold()
 
         return (item.size, name) if self.list_sort.column == "size" else (name, 0)
@@ -70,6 +72,7 @@ class GameList(Detail):
             if self.selected is not None:
                 index = self.model.index(ids.index(self.selected), 0)
                 selection.setCurrentIndex(index, QItemSelectionModel.SelectionFlag.NoUpdate)
+
         finally:
             self.restoring = False
 
@@ -114,13 +117,15 @@ class GameList(Detail):
         idle = [item for item in found if item and not item.job]
         self.chosen = [item.id for item in idle if item.status in ("missing", "update")]
         self.redo_chosen = [item.id for item in idle if item.status == "ok"]
-        self.download_choice, self.redownload_choice = download_scopes(
+        choices = download_scopes(
             picked=len(self.picked),
             new=self.missing,
             done=self.redo_all,
             picked_new=self.chosen,
             picked_done=self.redo_chosen,
         )
+        self.download_choice = choices.download
+        self.redownload_choice = choices.redownload
         several = len(self.picked) > 1
         self.download_action.setToolTip("Download the selected new mods" if several else "Download every new mod")
         self.redownload_action.setToolTip(
@@ -128,10 +133,12 @@ class GameList(Detail):
         )
 
         # Count and size on each button, the same as the GitHub tab's buttons.
-        for action, (label, ids) in (
+        for action, choice in (
             (self.download_action, self.download_choice),
             (self.redownload_action, self.redownload_choice),
         ):
+            ids = choice.ids
+            label = choice.label
             size = sum(self.items[entry_id].size for entry_id in ids if entry_id in self.items)
             action.setText(action_text(text=label, count=len(ids), size=size))
             action.setEnabled(bool(ids))

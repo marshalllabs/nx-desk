@@ -2,13 +2,13 @@ import contextlib
 import http.client
 import os
 import time
-from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import Iterator, Optional, Sequence
 
 from .. import credentials, net, steamgriddb
 from ..config import ART_KEY_NAME, ART_LOOKUP_MAX_AGE, ART_LOOKUP_RULES, MAX_IMAGE, NO_CATALOG
 from ..names import art_file_name, art_stem, art_stem_of, art_url, search_names
-from ..schemas.artwork import ArtLookup, ArtSubject, SecretPlace
+from ..schemas.artwork import ArtLookup, ArtSources, ArtStatus, ArtSubject, SecretPlace
 from ..schemas.catalog import ArtKind, Mod
 from .base import VaultBase
 
@@ -34,6 +34,7 @@ class Artwork(VaultBase):
 
         try:
             yield
+
         finally:
             with self.lock:
                 self.art_active -= 1
@@ -69,23 +70,23 @@ class Artwork(VaultBase):
         return secret
 
     # SteamGridDB first when a key is set; the catalog's art for whatever it lacks.
-    def art_sources(self, item: Mod) -> tuple[str, str]:
+    def art_sources(self, item: Mod) -> ArtSources:
         found = self._art_lookup(item=item)
         cover, background = art_url(item=item, kind="cover"), art_url(item=item, kind="background")
 
         if found is None:
-            return cover, background
+            return ArtSources(cover=cover, background=background)
 
-        return found.cover or cover, found.background or background
+        return ArtSources(cover=found.cover or cover, background=found.background or background)
 
     # Only SteamGridDB, for games that have no art of their own. None when it could not be asked: no
     # key, a refused key, a pause or a network error.
-    def steamgrid_art(self, item: ArtSubject) -> tuple[str, str] | None:
+    def steamgrid_art(self, item: ArtSubject) -> Optional[ArtSources]:
         found = self._art_lookup(item=item)
 
-        return (found.cover, found.background) if found else None
+        return ArtSources(cover=found.cover, background=found.background) if found else None
 
-    def _art_lookup(self, item: ArtSubject) -> ArtLookup | None:
+    def _art_lookup(self, item: ArtSubject) -> Optional[ArtLookup]:
         if not self.has_art_key():
             return None
 
@@ -106,16 +107,19 @@ class Artwork(VaultBase):
         try:
             with self._fetching_art():
                 found = steamgriddb.lookup(name=name, key=secret, others=others)
+
         except steamgriddb.KeyRefused as error:
             with self.lock:
                 self.art_error = str(error)
 
             return saved
+
         except steamgriddb.RateLimited as error:
             with self.lock:
                 self.art_paused_until = time.monotonic() + error.wait
 
             return saved
+
         except steamgriddb.ArtworkError:
             return saved
 
@@ -135,7 +139,7 @@ class Artwork(VaultBase):
 
     # Runs on an art thread. The file name holds a digest of the URL, so a new URL, such as SteamGridDB's once a
     # key is set, is a new name: the file is there already, or the old one is replaced.
-    def fetch_art(self, item: ArtSubject, kind: ArtKind, url: str, art_dir: Path) -> Path | None:
+    def fetch_art(self, item: ArtSubject, kind: ArtKind, url: str, art_dir: Path) -> Optional[Path]:
         if not url:
             return None
 
@@ -151,6 +155,7 @@ class Artwork(VaultBase):
                 net.http_get(url=url) as response,
             ):
                 data = response.read(MAX_IMAGE + 1)
+
         except (OSError, ValueError, http.client.HTTPException):
             return None
 
@@ -167,7 +172,7 @@ class Artwork(VaultBase):
 
             art_dir.mkdir(parents=True, exist_ok=True)
             temp = path.with_suffix(suffix=".tmp")
-            temp.write_bytes(data)
+            temp.write_bytes(data=data)
             os.replace(src=temp, dst=path)
 
         return path
@@ -187,6 +192,6 @@ class Artwork(VaultBase):
                 if art_stem_of(file_name=old.name) not in stems:
                     old.unlink(missing_ok=True)
 
-    def art_status(self) -> tuple[SecretPlace, str]:
+    def art_status(self) -> ArtStatus:
         with self.lock:
-            return self.art_key.place, self.art_error
+            return ArtStatus(place=self.art_key.place, error=self.art_error)

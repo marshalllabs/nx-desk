@@ -1,12 +1,13 @@
 import threading
 import time
-from collections.abc import Iterable
 from pathlib import Path
+from typing import Iterable
 
 from .. import net, zips
-from ..names import clean_game_name, download_path, format_size
+from ..names import clean_game_name, download_path
 from ..schemas.catalog import Mod
-from ..schemas.download import Fetched, Job
+from ..schemas.download import DownloadTask, Fetched, Job, RepackTask
+from ..utils.sizes import format_size
 from ..zips import Cancelled
 from .auto_upload import AutoUploads
 from .fetch import Fetching
@@ -44,7 +45,12 @@ class DownloadQueue(AutoUploads, Fetching):
                     # The event also tells this run apart from a later one of the same mod.
                     cancel = self.cancels[entry_id] = threading.Event()
                     self.queue.put(
-                        item=(entry.size, next(self.queue_order), entry, cancel),
+                        item=DownloadTask(
+                            priority=entry.size,
+                            order=next(self.queue_order),
+                            entry=entry,
+                            cancel=cancel,
+                        ),
                     )
                     size = f" ({format_size(value=entry.size)})" if entry.size else ""
                     self._log_game(entry=entry, text=f"queued{size}")
@@ -85,7 +91,8 @@ class DownloadQueue(AutoUploads, Fetching):
 
     def worker(self) -> None:
         while True:
-            _, _, entry, cancel = self.queue.get()
+            task = self.queue.get()
+            entry, cancel = task.entry, task.cancel
 
             with self.lock:
                 current = self.cancels.get(entry.id) is cancel
@@ -102,7 +109,8 @@ class DownloadQueue(AutoUploads, Fetching):
             self._repack_next()
 
     def _repack_next(self) -> None:
-        _, _, entry, fetched, target, cancel, started = self.repack_queue.get()
+        task = self.repack_queue.get()
+        entry, fetched, target, cancel, started = task.entry, task.fetched, task.target, task.cancel, task.started
 
         if cancel.is_set():
             return
@@ -140,12 +148,22 @@ class DownloadQueue(AutoUploads, Fetching):
             fetched = self._download(entry=entry, cancel=cancel)
             self._update_job(entry_id=entry_id, cancel=cancel, phase="waiting_repack", speed=0)
             self.repack_queue.put(
-                item=(entry.size, next(self.queue_order), entry, fetched, target, cancel, started),
+                item=RepackTask(
+                    priority=entry.size,
+                    order=next(self.queue_order),
+                    entry=entry,
+                    fetched=fetched,
+                    target=target,
+                    cancel=cancel,
+                    started=started,
+                ),
             )
 
             return
+
         except Cancelled:
             pass
+
         except Exception as error:
             self._fail_job(entry=entry, cancel=cancel, error=error)
 
@@ -199,8 +217,10 @@ class DownloadQueue(AutoUploads, Fetching):
                 self._queue_auto_upload(entry=entry, folder=target.parent, cancel=cancel, replaced=replaced)
 
                 return
+
         except Cancelled:
             pass
+
         except Exception as error:
             self._fail_job(entry=entry, cancel=cancel, error=error)
 

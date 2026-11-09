@@ -1,3 +1,5 @@
+from typing import Dict, List, Tuple, Union
+
 from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QListView, QStyle, QStyledItemDelegate, QStyleOptionViewItem
@@ -13,7 +15,7 @@ BAR = 5
 
 
 # The name on up to two lines: the second one is cut with an ellipsis when it does not fit.
-def two_lines(metrics: QFontMetrics, text: str, width: int) -> list[str]:
+def two_lines(metrics: QFontMetrics, text: str, width: int) -> List[str]:
     words = text.split()
     first = ""
     used = 0
@@ -36,10 +38,10 @@ class CardDelegate(QStyledItemDelegate):
     def __init__(self, thumbs: CoverThumbs, parent: QListView) -> None:
         super().__init__(parent)
         self.thumbs = thumbs
-        self.glyphs: dict[tuple[str, int], QPixmap] = {}
+        self.glyphs: Dict[Tuple[str, int], QPixmap] = {}
 
     # The grid sets the size of a cell, since it depends on the width of the view.
-    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex | QPersistentModelIndex) -> QSize:
+    def sizeHint(self, option: QStyleOptionViewItem, index: Union[QModelIndex, QPersistentModelIndex]) -> QSize:
         grid = self.parent()
 
         return grid.gridSize() if isinstance(grid, QListView) else option.rect.size()
@@ -48,7 +50,7 @@ class CardDelegate(QStyledItemDelegate):
         self,
         painter: QPainter,
         option: QStyleOptionViewItem,
-        index: QModelIndex | QPersistentModelIndex,
+        index: Union[QModelIndex, QPersistentModelIndex],
     ) -> None:
         card = index.data(CARD_ROLE)
 
@@ -88,6 +90,7 @@ class CardDelegate(QStyledItemDelegate):
 
         if image is not None:
             painter.drawImage(cover, image)
+
         elif self.thumbs.shows_icon(key=card.key):
             # Looked up and none found, or no key: an icon, as the detail pane shows. While the art is still
             # fetched or being cut the card stays plain.
@@ -103,7 +106,7 @@ class CardDelegate(QStyledItemDelegate):
         # A transfer shows as a bar along the foot of the cover.
         if card.progress >= 0:
             painter.fillRect(cover.x(), cover.bottom() - BAR + 1, cover.width(), BAR, QColor(0, 0, 0, 170))
-            done = round(cover.width() * min(1.0, card.progress))
+            done = round(number=cover.width() * min(1.0, card.progress))
             painter.fillRect(cover.x(), cover.bottom() - BAR + 1, done, BAR, QColor(COLORS["accent"]))
 
         painter.setClipping(False)
@@ -126,7 +129,7 @@ class CardDelegate(QStyledItemDelegate):
         painter.setFont(font)
         painter.setPen(QColor(COLORS["ink"]))
 
-        for number, text in enumerate(two_lines(metrics=metrics, text=card.title, width=cover.width())):
+        for number, text in enumerate(iterable=two_lines(metrics=metrics, text=card.title, width=cover.width())):
             painter.drawText(QRect(cover.x(), top + number * line, cover.width(), line), LEFT, text)
 
         # The muted text would fall under the contrast of the selected card, so it takes the plain colour there.

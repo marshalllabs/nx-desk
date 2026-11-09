@@ -1,3 +1,5 @@
+from typing import Optional
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
@@ -10,7 +12,7 @@ from ..style import set_role
 class ClickLabel(QLabel):
     clicked = Signal()
 
-    def __init__(self, text: str = "", role: str | None = None) -> None:
+    def __init__(self, text: str = "", role: Optional[str] = None) -> None:
         super().__init__(text)
 
         if role:

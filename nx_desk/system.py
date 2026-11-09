@@ -5,6 +5,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from typing import Dict, Union
 
 from .config import PROGRAM_NAME
 from .schemas.update import AppUpdate
@@ -36,6 +37,7 @@ def backup_path(program: Path) -> Path:
 def remove_path(path: Path) -> None:
     if path.is_dir():
         shutil.rmtree(path=path)
+
     elif path.exists():
         path.unlink()
 
@@ -45,6 +47,7 @@ def remove_old_program() -> None:
     if getattr(sys, "frozen", False):
         try:
             remove_path(path=backup_path(program=program_path()))
+
         except OSError:
             pass
 
@@ -53,10 +56,11 @@ def extract_program(archive: Path, target: Path, name: str) -> Path:
     if sys.platform == "darwin":
         # ditto keeps the symlinks and signature inside the .app.
         subprocess.run(args=["ditto", "-x", "-k", str(archive), str(target)], check=True)
+
     else:
         with zipfile.ZipFile(file=archive) as source:
             for info in source.infolist():
-                parts = info.filename.split("/")
+                parts = info.filename.split(sep="/")
 
                 if parts[0] == name and ".." not in parts:
                     source.extract(member=info, path=target)
@@ -80,6 +84,7 @@ def swap_program(new: Path, program: Path) -> None:
 
     try:
         shutil.move(src=str(new), dst=str(program))
+
     except OSError:
         os.replace(src=backup, dst=program)
         raise
@@ -97,11 +102,13 @@ def restart_program() -> None:
     subprocess.Popen(args=[str(program)], env={**system_env(), "PYINSTALLER_RESET_ENVIRONMENT": "1"})
 
 
-def open_in_system(path: Path | str) -> None:
+def open_in_system(path: Union[Path, str]) -> None:
     if sys.platform == "win32":
         os.startfile(filepath=path)
+
     elif sys.platform == "darwin":
         subprocess.Popen(args=["open", str(path)])
+
     else:
         subprocess.Popen(
             args=["xdg-open", str(path)],
@@ -111,13 +118,14 @@ def open_in_system(path: Path | str) -> None:
         )
 
 
-def system_env() -> dict[str, str]:
+def system_env() -> Dict[str, str]:
     # Desktop tools must not inherit the bundled library path of a packaged build.
     env = os.environ.copy()
     original = env.pop("LD_LIBRARY_PATH_ORIG", None)
 
     if original is not None:
         env["LD_LIBRARY_PATH"] = original
+
     elif getattr(sys, "frozen", False):
         env.pop("LD_LIBRARY_PATH", None)
 

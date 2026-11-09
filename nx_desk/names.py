@@ -2,6 +2,7 @@ import hashlib
 import re
 import unicodedata
 from pathlib import Path
+from typing import Dict, List
 from urllib.parse import urlsplit
 
 from .config import (
@@ -19,10 +20,6 @@ GAME_FOLDER = re.compile(pattern=r"(.+) - \[[^\[\]]+\] - \[[^\[\]]+\]$")
 GAME_FOLDER_VERSION = re.compile(pattern=r" - \[[^\[\]]+\] - \[([^\[\]]+)\]$")
 BUILD_SUFFIX = re.compile(pattern=r"-v\d+\]$")
 
-BINARY = "binary"
-SIZE_UNITS = {BINARY: (1024, "KiB", "MiB", "GiB"), "decimal": (1000, "KB", "MB", "GB")}
-size_units = BINARY
-
 
 def game_of(folder: str) -> str:
     match = GAME_FOLDER.match(string=folder)
@@ -32,8 +29,8 @@ def game_of(folder: str) -> str:
 
 # Games that appear more than once, by key, for showing them under one row. games maps each key
 # to its game name, or "" when there is none.
-def shared_games(games: dict[str, str]) -> dict[str, list[str]]:
-    found: dict[str, list[str]] = {}
+def shared_games(games: Dict[str, str]) -> Dict[str, List[str]]:
+    found: Dict[str, List[str]] = {}
 
     for key, game in games.items():
         if game:
@@ -43,7 +40,7 @@ def shared_games(games: dict[str, str]) -> dict[str, list[str]]:
 
 
 # The zip inside may leave out the build number, as in [1.0.2] for a folder ending [1.0.2-v131072].
-def folder_zip_names(folder: str) -> list[str]:
+def folder_zip_names(folder: str) -> List[str]:
     names = [f"{folder}.zip"]
 
     if BUILD_SUFFIX.search(string=folder):
@@ -60,7 +57,7 @@ def safe_name(name: str) -> str:
 
 def art_slug(name: str) -> str:
     text = unicodedata.normalize("NFKD", name.replace("đ", "d").replace("Đ", "D"))
-    text = text.encode("ascii", "ignore").decode("ascii").replace("'", "")
+    text = text.encode(encoding="ascii", errors="ignore").decode(encoding="ascii").replace("'", "")
 
     return re.sub(pattern=r"[^a-z0-9]+", repl="-", string=text.lower()).strip("-")
 
@@ -71,7 +68,7 @@ PORT_WORDS = {"nx", "switch", "port", "for"}
 
 # The names to search a game under: its cleaned name first, then the name without those trailing words and
 # with the separators of a repository name turned into spaces ("ff4_nx" gives "ff4").
-def search_names(name: str) -> list[str]:
+def search_names(name: str) -> List[str]:
     names = [clean_game_name(name=name)]
     words = [word for word in re.split(pattern=r"[\s_\-]+", string=strip_accents(text=name).strip()) if word]
 
@@ -102,7 +99,7 @@ def art_name(stem: str, url: str) -> str:
     if suffix not in IMAGE_SUFFIXES:
         suffix = ".img"
 
-    return f"{stem}.{hashlib.sha256(url.encode('utf-8')).hexdigest()[:8]}{suffix}"
+    return f"{stem}.{hashlib.sha256(string=url.encode(encoding='utf-8')).hexdigest()[:8]}{suffix}"
 
 
 def art_file_name(item: ArtSubject, kind: ArtKind, url: str) -> str:
@@ -111,13 +108,7 @@ def art_file_name(item: ArtSubject, kind: ArtKind, url: str) -> str:
 
 # The stem a file name was made from: art_slug has no dots, so everything before the first one.
 def art_stem_of(file_name: str) -> str:
-    return file_name.split(".", 1)[0]
-
-
-def parse_version(text: object) -> tuple[int, ...] | None:
-    match = re.fullmatch(pattern=r"v?(\d+)\.(\d+)\.(\d+)", string=str(text).strip())
-
-    return tuple(int(part) for part in match.groups()) if match else None
+    return file_name.split(sep=".", maxsplit=1)[0]
 
 
 def display_version(game_version: str) -> str:
@@ -126,7 +117,7 @@ def display_version(game_version: str) -> str:
     return match.group(0) if match else MISSING_VERSION
 
 
-def title_name(names: dict[str, str], title: str) -> str:
+def title_name(names: Dict[str, str], title: str) -> str:
     # Update title IDs end in 800 and otherwise match the base game.
     name = names.get(title) or names.get(title[:-3] + "000") or ""
 
@@ -154,7 +145,7 @@ def tidy_capitals(name: str) -> str:
 
 def strip_accents(text: str) -> str:
     # Marks on other scripts stay, since they change the letter there.
-    kept: list[str] = []
+    kept: List[str] = []
 
     for char in unicodedata.normalize("NFD", text.replace("đ", "d").replace("Đ", "D")):
         if not (unicodedata.category(char) == "Mn" and kept and ord(kept[-1]) < 0x250):
@@ -192,20 +183,3 @@ def download_path(name: str, version: str, mod: str) -> Path:
     folder = f"{game_folder(name=name, mod=mod)} - [{version_label(version=version)}]"
 
     return Path(folder) / f"{folder}.zip"
-
-
-def set_size_units(units: str) -> None:
-    global size_units
-    size_units = units if units in SIZE_UNITS else BINARY
-
-
-def format_size(value: float) -> str:
-    base, kilo, mega, giga = SIZE_UNITS[size_units]
-
-    if value >= base**3:
-        return f"{value / base**3:.2f} {giga}"
-
-    if value >= base**2:
-        return f"{value / base**2:.1f} {mega}"
-
-    return f"{max(1, round(value / base))} {kilo}"

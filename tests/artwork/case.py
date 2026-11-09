@@ -6,7 +6,7 @@ import urllib.error
 import urllib.parse
 from email.message import Message
 from pathlib import Path
-from typing import Any
+from typing import Dict, List, Optional
 from unittest import mock
 
 from nx_desk import credentials
@@ -18,7 +18,7 @@ HERO = "https://cdn.test/hero/background.jpg"
 
 class Response:
     def __init__(self, body: bytes) -> None:
-        self.body = io.BytesIO(body)
+        self.body = io.BytesIO(initial_bytes=body)
 
     def __enter__(self) -> "Response":
         return self
@@ -30,29 +30,29 @@ class Response:
         return self.body.read(size)
 
 
-def http_error(url: str, code: int, headers: dict[str, str] | None = None) -> urllib.error.HTTPError:
+def http_error(url: str, code: int, headers: Optional[Dict[str, str]] = None) -> urllib.error.HTTPError:
     message = Message()
 
     for name, value in (headers or {}).items():
         message[name] = value
 
-    return urllib.error.HTTPError(url=url, code=code, msg="error", hdrs=message, fp=io.BytesIO(b"{}"))
+    return urllib.error.HTTPError(url=url, code=code, msg="error", hdrs=message, fp=io.BytesIO(initial_bytes=b"{}"))
 
 
 def reply(data: object) -> Response:
-    return Response(body=json.dumps(obj={"success": True, "data": data}).encode("utf-8"))
+    return Response(body=json.dumps(obj={"success": True, "data": data}).encode(encoding="utf-8"))
 
 
 # Answers like SteamGridDB: one known game, its grid only at 600x900, and its hero.
 class FakeSteamGridDB:
-    def __init__(self, games: dict[str, int] | None = None, refuse: int = 0) -> None:
+    def __init__(self, games: Optional[Dict[str, int]] = None, refuse: int = 0) -> None:
         self.games = {"Game": 7} if games is None else games
         self.refuse = refuse
-        self.calls: list[str] = []
-        self.keys: list[str] = []
-        self.images: list[str] = []
+        self.calls: List[str] = []
+        self.keys: List[str] = []
+        self.images: List[str] = []
 
-    def __call__(self, url: str, headers: dict[str, str] | None = None, timeout: int = 30) -> Response:
+    def __call__(self, url: str, headers: Optional[Dict[str, str]] = None, timeout: int = 30) -> Response:
         if not url.startswith("https://www.steamgriddb.com/"):
             self.images.append(url)
 
@@ -64,9 +64,9 @@ class FakeSteamGridDB:
         if self.refuse:
             raise http_error(url=url, code=self.refuse, headers={"Retry-After": "120"})
 
-        parts = urllib.parse.urlsplit(url)
-        path = urllib.parse.unquote(parts.path.removeprefix("/api/v2"))
-        query = urllib.parse.parse_qs(parts.query)
+        parts = urllib.parse.urlsplit(url=url)
+        path = urllib.parse.unquote(string=parts.path.removeprefix("/api/v2"))
+        query = urllib.parse.parse_qs(qs=parts.query)
 
         if path.startswith("/search/autocomplete/"):
             name = path.removeprefix("/search/autocomplete/")
@@ -89,19 +89,23 @@ class ArtCase(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.folder = Path(folder.name)
         # Tests never reach the real system keyring.
-        self.keyring: dict[str, str] = {}
-        patcher = mock.patch.object(credentials, "keyring", self.fake_keyring())
+        self.keyring: Dict[str, str] = {}
+        self.keyring_mock = self.fake_keyring()
+        patcher = mock.patch.object(target=credentials, attribute="keyring", new=self.keyring_mock)
         patcher.start()
         self.addCleanup(patcher.stop)
         self.vault = Vault(base=self.folder)
 
-    def fake_keyring(self) -> Any:
+    def fake_keyring(self) -> mock.Mock:
         fake = mock.Mock()
-        fake.set_password.side_effect = lambda service, user, value: self.keyring.__setitem__(user, value)
-        fake.get_password.side_effect = lambda service, user: self.keyring.get(user)
-        fake.delete_password.side_effect = lambda service, user: self.keyring.pop(user, None)
+        fake.set_password.side_effect = lambda service_name, username, password: self.keyring.__setitem__(
+            username,
+            password,
+        )
+        fake.get_password.side_effect = lambda service_name, username: self.keyring.get(username)
+        fake.delete_password.side_effect = lambda service_name, username: self.keyring.pop(username, None)
 
         return fake
 
     def break_keyring(self) -> None:
-        credentials.keyring.set_password.side_effect = RuntimeError("no keyring")  # type: ignore[attr-defined]
+        self.keyring_mock.set_password.side_effect = RuntimeError("no keyring")

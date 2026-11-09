@@ -1,5 +1,5 @@
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 import shiboken6
 from PySide6.QtCore import Qt, QTimer
@@ -29,7 +29,7 @@ COLUMNS = ("Repository", "Owner", "Visibility", "Updated", "Description")
 
 # A button that shows the chosen repository by name, and its owner too when another one shares it.
 # It is as wide as its text, which sets its size hint each time it changes.
-def show_repo(widget: QPushButton, repo: str, repos: list[str]) -> None:
+def show_repo(widget: QPushButton, repo: str, repos: List[str]) -> None:
     chooser(
         widget=widget,
         text=repo_labels(repos=repos).get(repo, repo) if repo else "Choose a repository",
@@ -44,7 +44,7 @@ class RepoPicker(QDialog):
         self.vault = vault
         self.current = current
         self.chosen = ""
-        self.shown: int | None = None
+        self.shown: Optional[int] = None
         self.setWindowTitle("Choose a repository")
         self.resize(820, 480)
         layout = QVBoxLayout(self)
@@ -107,12 +107,12 @@ class RepoPicker(QDialog):
         self.shown = job.repo_list
         self.fill(repos=job.repo_details)
 
-    def fill(self, repos: list[Repo]) -> None:
+    def fill(self, repos: List[Repo]) -> None:
         picked = self.picked() or self.current
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(repos))
 
-        for row, repo in enumerate(repos):
+        for row, repo in enumerate(iterable=repos):
             texts = (
                 repo.name or repo.full_name,
                 repo.owner,
@@ -121,7 +121,7 @@ class RepoPicker(QDialog):
                 repo.description,
             )
 
-            for column, text in enumerate(texts):
+            for column, text in enumerate(iterable=texts):
                 cell = QTableWidgetItem(text)
                 cell.setData(Qt.ItemDataRole.UserRole, repo.full_name)
                 cell.setToolTip(repo.full_name if column == 0 else text)
@@ -169,7 +169,7 @@ class RepoPicker(QDialog):
 
 
 # The chosen owner/name, or None when the picker was closed without one.
-def pick_repo(parent: QWidget, vault: "Vault", current: str) -> str | None:
+def pick_repo(parent: QWidget, vault: "Vault", current: str) -> Optional[str]:
     picker = RepoPicker(parent=parent, vault=vault, current=current)
     accepted = picker.exec() == QDialog.DialogCode.Accepted
     chosen = picker.chosen

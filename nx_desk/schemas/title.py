@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic import BaseModel
 
 
@@ -9,7 +11,7 @@ class TitleRow(BaseModel):
 
 
 class TitleSnapshot(BaseModel):
-    rows: list[TitleRow]
+    rows: List[TitleRow]
     version: int
     loading: bool
     error: str

@@ -50,13 +50,17 @@ class Detail(ArtPane):
 
         if job and job.phase == "error":
             message, text, role = "Error: " + job.message, "Retry", "accent"
+
         elif active:
             message, text, role = status_text(item=item), "Cancel", "danger"
+
         elif item.status == "update":
             message, text, role = update_text(item=item), "Update", "accent"
+
         elif item.status == "ok":
             where = "Online only" if item.remote else "Downloaded"
             message, text, role = f"{where}, up to date", "Re-download", None
+
         else:
             message, text, role = "Not downloaded", "Download", "accent"
 
@@ -67,5 +71,6 @@ class Detail(ArtPane):
         if job is not None and active:
             self.progress.setValue(int(1000 * job.done / job.total) if job.total else 0)
             self.progress.show()
+
         else:
             self.progress.hide()

@@ -1,5 +1,5 @@
 import html
-from collections.abc import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
 
 import shiboken6
 from PySide6.QtCore import Qt
@@ -16,18 +16,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..utils.text import plural
+from ..schemas.presentation import TableData
 from .widgets.basics import button, label
 
 # Past this many rows the table scrolls instead of growing the window.
 TABLE_LINES = 10
 TABLE_ROW = 28
 RIGHT = ("Size",)
-# The column names, the rows of texts and a total shown under the table.
-Table = tuple[Sequence[str], Sequence[Sequence[str]], str]
 
 
-__all__ = ["ask_text", "ask_yes_no", "confirm", "confirm_typed", "plural", "show_message"]
+__all__ = ["ask_text", "ask_yes_no", "confirm", "confirm_typed", "show_message"]
 
 
 # A finished dialog is deleted at once. Left under the window, it crashed Python on exit.
@@ -41,7 +39,7 @@ def run_dialog(dialog: QDialog) -> int:
 # A wrapped label told its layout a height for another width than it got, so a fixed-size dialog cut
 # off its lines. It gets one width, its text's up to high, and the height that width needs.
 def fit_text(widget: QLabel, low: int, high: int) -> None:
-    widest = max(widget.fontMetrics().horizontalAdvance(line) for line in widget.text().split("\n"))
+    widest = max(widget.fontMetrics().horizontalAdvance(line) for line in widget.text().split(sep="\n"))
     width = min(high, max(low, widest + 8))
     widget.setFixedWidth(width)
     widget.setFixedHeight(widget.heightForWidth(width))
@@ -52,9 +50,9 @@ def fit_text(widget: QLabel, low: int, high: int) -> None:
 def popup(
     title: str,
     message: str,
-    parent: QWidget | None,
+    parent: Optional[QWidget],
     buttons: Sequence[str],
-    table: Table | None = None,
+    table: Optional[TableData] = None,
     role: str = "accent",
 ) -> int:
     dialog = QDialog(parent)
@@ -69,7 +67,7 @@ def popup(
     layout.addWidget(text, alignment=Qt.AlignmentFlag.AlignCenter)
 
     if table:
-        columns, rows, total = table
+        columns, rows, total = table.columns, table.rows, table.total
         layout.addWidget(detail_table(columns=columns, rows=rows, parent=parent))
 
         if total:
@@ -84,7 +82,7 @@ def popup(
     row = QHBoxLayout()
     row.addStretch(1)
 
-    for index, text_value in enumerate(buttons):
+    for index, text_value in enumerate(iterable=buttons):
         choice = button(text=text_value, role=None if index else role)
         choice.setMinimumWidth(96)
         choice.clicked.connect(lambda _=False, value=index: pick(value=value))
@@ -109,8 +107,8 @@ def confirm_typed(
     message: str,
     word: str,
     action: str,
-    parent: QWidget | None,
-    table: Table | None = None,
+    parent: Optional[QWidget],
+    table: Optional[TableData] = None,
 ) -> bool:
     dialog = QDialog(parent)
     dialog.setWindowTitle(title)
@@ -123,13 +121,13 @@ def confirm_typed(
     layout.addWidget(text)
 
     if table:
-        columns, rows, total = table
+        columns, rows, total = table.columns, table.rows, table.total
         layout.addWidget(detail_table(columns=columns, rows=rows, parent=parent))
 
         if total:
             layout.addWidget(label(text=total, role="muted"), alignment=Qt.AlignmentFlag.AlignRight)
 
-    layout.addWidget(label(text=f"To confirm, type <b>{html.escape(word)}</b> below."))
+    layout.addWidget(label(text=f"To confirm, type <b>{html.escape(s=word)}</b> below."))
     entry = QLineEdit()
     entry.setPlaceholderText(word)
     layout.addWidget(entry)
@@ -153,7 +151,7 @@ def confirm_typed(
     return run_dialog(dialog=dialog) == QDialog.DialogCode.Accepted
 
 
-def detail_table(columns: Sequence[str], rows: Sequence[Sequence[str]], parent: QWidget | None) -> QTableWidget:
+def detail_table(columns: Sequence[str], rows: Sequence[Sequence[str]], parent: Optional[QWidget]) -> QTableWidget:
     table = QTableWidget(len(rows), len(columns))
     table.setHorizontalHeaderLabels(columns)
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -167,8 +165,8 @@ def detail_table(columns: Sequence[str], rows: Sequence[Sequence[str]], parent: 
     header.setHighlightSections(False)
     header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-    for row, texts in enumerate(rows):
-        for column, text in enumerate(texts):
+    for row, texts in enumerate(iterable=rows):
+        for column, text in enumerate(iterable=texts):
             cell = QTableWidgetItem(text)
 
             if columns[column] in RIGHT:
@@ -176,7 +174,7 @@ def detail_table(columns: Sequence[str], rows: Sequence[Sequence[str]], parent: 
 
             table.setItem(row, column, cell)
 
-    for column, name in enumerate(columns):
+    for column, name in enumerate(iterable=columns):
         if name in RIGHT:
             table.horizontalHeaderItem(column).setTextAlignment(  # type: ignore[union-attr]
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -195,7 +193,7 @@ def detail_table(columns: Sequence[str], rows: Sequence[Sequence[str]], parent: 
     return table
 
 
-def show_message(title: str, message: str, parent: QWidget | None) -> None:
+def show_message(title: str, message: str, parent: Optional[QWidget]) -> None:
     popup(title=title, message=message, parent=parent, buttons=("OK",))
 
 
@@ -204,7 +202,7 @@ def show_message(title: str, message: str, parent: QWidget | None) -> None:
 def ask_yes_no(
     title: str,
     message: str,
-    parent: QWidget | None,
+    parent: Optional[QWidget],
     action: str = "",
     danger: bool = False,
     keep: str = "Cancel",
@@ -224,7 +222,7 @@ def confirm(
     question: str,
     columns: Sequence[str],
     rows: Iterable[Sequence[str]],
-    parent: QWidget | None,
+    parent: Optional[QWidget],
     total: str = "",
 ) -> bool:
     rows = list(rows)
@@ -234,12 +232,18 @@ def confirm(
     return (
         bool(rows)
         # The title names the action, such as "Re-download" or "Upload all", so it is the button too.
-        and popup(title=title, message=question, parent=parent, buttons=(title, "Cancel"), table=(columns, rows, total))
+        and popup(
+            title=title,
+            message=question,
+            parent=parent,
+            buttons=(title, "Cancel"),
+            table=TableData(columns=columns, rows=rows, total=total),
+        )
         == 0
     )
 
 
-def ask_text(title: str, message: str, initial: str, parent: QWidget | None) -> str | None:
+def ask_text(title: str, message: str, initial: str, parent: Optional[QWidget]) -> Optional[str]:
     dialog = QDialog(parent)
     dialog.setWindowTitle(title)
     layout = QVBoxLayout(dialog)

@@ -1,4 +1,5 @@
-from typing import Any
+from ..schemas.catalog import Highlight
+from ..schemas.examples import CatalogExample, ExampleMod
 
 # The canonical fields NXDesk works with, and the source keys we recognise for each
 # without being told. Catalogs from different projects name the same thing differently
@@ -75,34 +76,34 @@ ROOT_ALIASES = [
 ]
 
 # A catalog every field of which is found without a mapping, shown in the catalog dialog.
-CATALOG_TEMPLATE: dict[str, Any] = {
-    "mods": [
-        {
-            "id": "example-game",
-            "title_id": "0100000000010000",
-            "name": "Example Game",
-            "game_version": "1.0.0",
-            "mod_version": "v1",
-            "sha256": "<SHA-256 of the zip, 64 hex characters>",
-            "size": 12345678,
-            "url": "https://example.com/example-game.zip",
-            "mirrors": ["https://mirror.example.com/example-game.zip", "gdrive:<Google Drive file id>"],
-            "tagline": "One line about the game",
-            "developer": "Studio",
-            "release": "2024-01-31",
-            "translator": "Team",
-            "tags": ["Action", "Adventure"],
-            "description": ["First paragraph.", "Second paragraph."],
-            "highlights": [{"title": "For game version", "text": "1.0.0"}],
-            "done": ["What the mod changes"],
-            "kept": ["What it leaves as it was"],
-            "changelog": "What changed in this version",
-            "credit": "Thanks to everyone who helped",
-            "cover": "https://example.com/cover.jpg",
-            "background": "https://example.com/background.jpg",
-        },
+CATALOG_TEMPLATE = CatalogExample(
+    mods=[
+        ExampleMod(
+            id="example-game",
+            title_id="0100000000010000",
+            name="Example Game",
+            game_version="1.0.0",
+            mod_version="v1",
+            sha256="<SHA-256 of the zip, 64 hex characters>",
+            size=12345678,
+            url="https://example.com/example-game.zip",
+            mirrors=["https://mirror.example.com/example-game.zip", "gdrive:<Google Drive file id>"],
+            tagline="One line about the game",
+            developer="Studio",
+            release="2024-01-31",
+            translator="Team",
+            tags=["Action", "Adventure"],
+            description=["First paragraph.", "Second paragraph."],
+            highlights=[Highlight(title="For game version", text="1.0.0")],
+            done=["What the mod changes"],
+            kept=["What it leaves as it was"],
+            changelog="What changed in this version",
+            credit="Thanks to everyone who helped",
+            cover="https://example.com/cover.jpg",
+            background="https://example.com/background.jpg",
+        ),
     ],
-}
+)
 
 # Fields the "advanced" panel of the catalog dialog lets the user map by hand.
 MAPPABLE_FIELDS = [

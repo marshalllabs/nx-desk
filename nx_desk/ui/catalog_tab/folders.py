@@ -35,6 +35,7 @@ class Folders(CatalogTabState):
     def run_move(self, folder: str) -> None:
         try:
             new = self.vault.move_download_dir(new_dir=folder)
+
         except (OSError, ValueError, shutil.Error) as error:
             self.app.later(show_message, "Move failed", str(error) or type(error).__name__, self.app)
 

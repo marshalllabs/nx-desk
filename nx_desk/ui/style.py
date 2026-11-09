@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import cast
+from typing import Optional
 
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette
 from PySide6.QtWidgets import QApplication, QWidget
@@ -228,7 +228,7 @@ def apply(app: QApplication, family: str = "", size: int = 0) -> None:
     apply_font(app=app, family=family, size=size)
 
 
-def set_role(widget: QWidget, role: str | None) -> None:
+def set_role(widget: QWidget, role: Optional[str]) -> None:
     if widget.property("role") != role:
         widget.setProperty("role", role)
         widget.style().unpolish(widget)
@@ -236,5 +236,9 @@ def set_role(widget: QWidget, role: str | None) -> None:
 
 
 def application() -> QApplication:
-    # The UI always runs inside a QApplication, which instance() only types as its base class.
-    return cast(QApplication, QApplication.instance())
+    instance = QApplication.instance()
+
+    if not isinstance(instance, QApplication):
+        raise RuntimeError("The UI requires a QApplication")
+
+    return instance

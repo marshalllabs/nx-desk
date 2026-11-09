@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Dict, Optional
 from unittest import mock
 
 from nx_desk import uploader, vault
@@ -18,8 +19,8 @@ class GitHubCase(unittest.TestCase):
         self.hub = FakeGitHub()
 
         for patcher in (
-            mock.patch.object(uploader.command, "gh", self.hub),
-            mock.patch.object(uploader.upload, "post_asset", self.hub.post),
+            mock.patch.object(target=uploader.command, attribute="gh", new=self.hub),
+            mock.patch.object(target=uploader.upload, attribute="post_asset", new=self.hub.post),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -33,8 +34,8 @@ class GitHubCase(unittest.TestCase):
         self,
         name: str,
         data: bytes = b"zip",
-        extra: dict[str, bytes] | None = None,
-        root: Path | None = None,
+        extra: Optional[Dict[str, bytes]] = None,
+        root: Optional[Path] = None,
     ) -> Path:
         base = (root or self.src) / name
         base.mkdir(parents=True, exist_ok=True)
@@ -52,7 +53,7 @@ class GitHubCase(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data=data)
 
-    def statuses(self) -> dict[str, str]:
+    def statuses(self) -> Dict[str, str]:
         return {folder.name: folder.status for folder in self.store.upload_job.folders}
 
     def reupload_then_remove(self) -> None:

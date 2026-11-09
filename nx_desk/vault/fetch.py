@@ -2,18 +2,19 @@ import http.client
 import threading
 import time
 import urllib.error
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlsplit
 
 from .. import net
 from ..config import CHUNK, RETRIES
-from ..names import format_size
 from ..schemas.catalog import Mod
-from ..schemas.download import Fetched, Pace
+from ..schemas.download import Fetched, FetchProgress, Pace
 from ..schemas.state import DownloadRecord
 from ..utils.files import sha256_of
 from ..utils.http_headers import content_range_total, retry_after
+from ..utils.sizes import format_size
 from ..zips import Cancelled
 from .catalogs import Catalogs
 from .status import Statuses
@@ -47,7 +48,7 @@ class Fetching(Catalogs, Statuses):
 
         # Some servers cap each reply, so a short partial reply means asking for the next piece.
         while True:
-            done, total, partial = self._fetch_piece(
+            progress = self._fetch_piece(
                 entry=entry,
                 url=url,
                 part=part,
@@ -55,6 +56,9 @@ class Fetching(Catalogs, Statuses):
                 have=have,
                 pace=pace,
             )
+            done = progress.done
+            total = progress.total
+            partial = progress.partial
             pieces += 1
             expected = size or total
 
@@ -108,12 +112,13 @@ class Fetching(Catalogs, Statuses):
         cancel: threading.Event,
         have: int,
         pace: Pace,
-    ) -> tuple[int, int, bool]:
+    ) -> FetchProgress:
         size = entry.size
         headers = {"Range": f"bytes={have}-"} if have else {}
 
         try:
             response = net.http_get(url=url, headers=headers)
+
         except urllib.error.HTTPError as error:
             if error.code == 416:
                 part.unlink(missing_ok=True)
@@ -134,7 +139,7 @@ class Fetching(Catalogs, Statuses):
                 mode = "ab" if have and partial else "wb"
                 done = have if mode == "ab" else 0
 
-                with open(part, mode) as handle:
+                with open(file=part, mode=mode) as handle:
                     while True:
                         if cancel.is_set():
                             raise Cancelled
@@ -156,12 +161,13 @@ class Fetching(Catalogs, Statuses):
                         self._note_progress(entry=entry, cancel=cancel, done=done, pace=pace)
 
                     self._update_job(entry_id=entry.id, cancel=cancel, done=done)
+
         finally:
             with self.lock:
                 if self.responses.get(entry.id) is response:
                     del self.responses[entry.id]
 
-        return done, total, partial
+        return FetchProgress(done=done, total=total, partial=partial)
 
     def _download(self, entry: Mod, cancel: threading.Event) -> Fetched:
         self.parts.mkdir(exist_ok=True)
@@ -182,8 +188,10 @@ class Fetching(Catalogs, Statuses):
                         self.rate_strikes = 0
 
                     self._fetch(entry=entry, url=url, part=part, cancel=cancel)
+
                 except Cancelled:
                     raise
+
                 except urllib.error.HTTPError as error:
                     code, after = error.code, error.headers.get("Retry-After")
                     error.close()
@@ -214,6 +222,7 @@ class Fetching(Catalogs, Statuses):
 
                     if code in (404, 410):
                         break
+
                 except (OSError, ValueError, http.client.HTTPException) as error:
                     if cancel.is_set():
                         raise Cancelled from error
@@ -224,9 +233,11 @@ class Fetching(Catalogs, Statuses):
                         text=f"download error (try {attempt}): {last_error}",
                         level="warn",
                     )
+
                 else:
                     try:
                         return self._finish(entry=entry, part=part, cancel=cancel)
+
                     except ValueError as error:
                         last_error = str(error) or type(error).__name__
                         self._log_game(entry=entry, text=last_error, level="error")
@@ -279,6 +290,7 @@ class Fetching(Catalogs, Statuses):
     def _finish(self, entry: Mod, part: Path, cancel: threading.Event) -> Fetched:
         if not entry.sha256:
             self._log_game(entry=entry, text="catalog has no SHA-256, skipping verification", level="warn")
+
         else:
             self._update_job(entry_id=entry.id, cancel=cancel, phase="verifying", speed=0)
             self._log_game(entry=entry, text="verifying SHA-256")
@@ -293,7 +305,7 @@ class Fetching(Catalogs, Statuses):
 
         return Fetched(wire=part)
 
-    def _commit(self, entry: Mod, target: Path) -> Path | None:
+    def _commit(self, entry: Mod, target: Path) -> Optional[Path]:
         with self.lock:
             previous = self._record_of(entry=entry)
             old_path = self.local_path(record=previous) if previous else None
@@ -302,7 +314,7 @@ class Fetching(Catalogs, Statuses):
                 sha256=entry.sha256,
                 version=entry.version,
                 game_version=entry.game_version,
-                downloaded_at=datetime.now(tz=timezone.utc).isoformat(timespec="seconds"),
+                downloaded_at=datetime.now(tz=UTC).isoformat(timespec="seconds"),
             )
 
             # Every entry of the same file owns this copy.
@@ -327,5 +339,6 @@ class Fetching(Catalogs, Statuses):
 
             if path.parent != self.root and not any(path.parent.iterdir()):
                 path.parent.rmdir()
+
         except OSError:
             pass

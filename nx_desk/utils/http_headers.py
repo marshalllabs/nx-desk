@@ -1,17 +1,19 @@
 import re
+from typing import Optional
 
 
 # The full size from a Content-Range header such as "bytes 0-99/1000"; 0 when it is missing.
-def content_range_total(value: str | None) -> int:
+def content_range_total(value: Optional[str]) -> int:
     match = re.search(pattern=r"/(\d+)$", string=value or "")
 
     return int(match.group(1)) if match else 0
 
 
 # The seconds a Retry-After header asks for; 0 when it is missing, a date or out of range.
-def retry_after(value: str | None) -> int:
+def retry_after(value: Optional[str]) -> int:
     try:
         seconds = int(str(value or "").strip())
+
     except ValueError:
         return 0
 

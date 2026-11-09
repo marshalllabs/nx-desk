@@ -1,6 +1,6 @@
 # NX Desk
 
-A desktop app that downloads, tracks and repackages game mods, and keeps them on GitHub releases.
+- A desktop app that downloads, tracks and repackages game mods, and keeps them on GitHub releases.
 
 - Works with catalogs you add yourself; none is included.
 - Catalogs are not signed, so only add ones you trust.
@@ -96,11 +96,11 @@ A desktop app that downloads, tracks and repackages game mods, and keeps them on
 ```bash
 make run     # run from source
 make check   # print available updates, no GUI
-make test    # run the tests
-make lint    # ruff, mypy and pyright
+make test    # run isolated offline tests
+make lint    # ruff, formatting, mypy and pyright
 make format  # fix style
 make build   # build dist/NXDesk-<platform>-<arch>.zip
-make clean   # remove build output and caches
+make clean   # remove build output and project caches; keep .venv
 ```
 
 ## Releases

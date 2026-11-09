@@ -2,12 +2,13 @@ import shutil
 import tempfile
 import threading
 from pathlib import Path
+from typing import Dict, Optional, Tuple
 
 from .. import uploader
 from ..names import clean_game_name
 from ..schemas.catalog import Mod
 from ..schemas.download import Outcome
-from ..schemas.github import Asset, AutoMod, FolderRef
+from ..schemas.github import Asset, AutoMod, AutoUpload, FolderRef
 from ..schemas.state import ReleaseRecord
 from ..utils.files import tree_size
 from ..zips import Cancelled
@@ -27,7 +28,7 @@ class AutoUploads(Jobs, Uploads):
         entry: Mod,
         folder: Path,
         cancel: threading.Event,
-        replaced: Path | None = None,
+        replaced: Optional[Path] = None,
     ) -> None:
         old = replaced.parent.name if replaced and replaced.parent.name != folder.name else ""
         mod: AutoMod = AutoMod(
@@ -42,7 +43,7 @@ class AutoUploads(Jobs, Uploads):
 
         with self.lock:
             self.auto_pending += 1
-            self.auto_queue.put(item=(mod, folder, folder.parent.name, old, cancel))
+            self.auto_queue.put(item=AutoUpload(mod=mod, folder=folder, tag=folder.parent.name, old=old, cancel=cancel))
             self._mark_folder(name=folder.name, progress="Waiting to upload")
 
             if self.auto_thread is None:
@@ -53,16 +54,18 @@ class AutoUploads(Jobs, Uploads):
 
     def auto_upload_worker(self) -> None:
         while True:
-            mod, folder, tag, old, cancel = self.auto_queue.get()
-            outcomes: tuple[Outcome, ...] = ("upload_failed",)
+            task = self.auto_queue.get()
+            mod, folder, tag, old, cancel = task.mod, task.folder, task.tag, task.old, task.cancel
+            outcomes: Tuple[Outcome, ...] = ("upload_failed",)
 
             try:
                 outcomes = self._auto_upload_one(mod=mod, folder=folder, tag=tag, cancel=cancel, old=old)
+
             finally:
                 self._mark_folder(name=folder.name, progress="")
                 self._finish_auto_upload(mod=mod, cancel=cancel, outcomes=outcomes)
 
-    def _finish_auto_upload(self, mod: AutoMod, cancel: threading.Event, outcomes: tuple[Outcome, ...]) -> None:
+    def _finish_auto_upload(self, mod: AutoMod, cancel: threading.Event, outcomes: Tuple[Outcome, ...]) -> None:
         with self.lock:
             self.auto_pending -= 1
 
@@ -85,7 +88,7 @@ class AutoUploads(Jobs, Uploads):
         tag: str,
         cancel: threading.Event,
         old: str = "",
-    ) -> tuple[Outcome, ...]:
+    ) -> Tuple[Outcome, ...]:
         def report(text: str, level: str = "info") -> None:
             self._log_download(text=text, level=level, game=mod.game)
             self._log_folder(folder_name=folder.name, text=text, level=level)
@@ -106,6 +109,7 @@ class AutoUploads(Jobs, Uploads):
 
                         if repo == self.upload_repo:
                             self._refresh_releases(repo=repo, select=self.upload_tag)
+
                     else:
                         leftovers = uploader.releases.delete_leftovers(repo=repo, tag=tag)
 
@@ -153,13 +157,14 @@ class AutoUploads(Jobs, Uploads):
                             moved=moved,
                             zipped=zipped,
                         )
+
                     finally:
                         shutil.rmtree(path=work, ignore_errors=True)
                         self._end_meter()
 
                 report(text=f"uploaded to release {tag}", level="ok")
 
-                def record(mods: dict[str, ReleaseRecord], assets: dict[str, Asset]) -> None:
+                def record(mods: Dict[str, ReleaseRecord], assets: Dict[str, Asset]) -> None:
                     files = list(uploader.parts.owned_assets(stem=stem, assets=assets))
 
                     # Entries of the same file share this upload.
@@ -190,7 +195,7 @@ class AutoUploads(Jobs, Uploads):
                 with self.lock:
                     delete = self.auto_delete and not cancel.is_set()
 
-                outcomes: tuple = ("uploaded",)
+                outcomes: Tuple[Outcome, ...] = ("uploaded",)
                 deleted = None
 
                 if delete:
@@ -202,16 +207,19 @@ class AutoUploads(Jobs, Uploads):
                         deleted = folder
                         outcomes = ("uploaded", "deleted")
                         report(text=f"deleted the local copy {folder.name}")
+
                     except OSError as error:
                         report(text=f"could not delete the local copy: {error}", level="error")
 
                 self._after_auto_upload(repo=repo, tag=tag, deleted=deleted)
 
                 return outcomes
+
         except Cancelled:
             report(text="upload stopped, the local copy is kept", level="warn")
 
             return ()
+
         # This thread serves every later upload, so one surprise must not end it.
         except Exception as error:
             report(text=f"upload to GitHub failed: {str(error) or type(error).__name__}", level="error")
@@ -219,7 +227,7 @@ class AutoUploads(Jobs, Uploads):
             return ("upload_failed",)
 
     # The GitHub tab may show this release or the deleted folder, so it is brought up to date.
-    def _after_auto_upload(self, repo: str, tag: str, deleted: Path | None) -> None:
+    def _after_auto_upload(self, repo: str, tag: str, deleted: Optional[Path]) -> None:
         if repo == self.upload_repo and tag == self.upload_tag:
             self._refresh_assets(repo=repo, tag=tag)
 

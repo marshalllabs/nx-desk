@@ -1,4 +1,4 @@
-from collections.abc import Collection, Iterable
+from typing import Collection, Iterable, List, Optional, Set, Tuple
 
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QAction
@@ -9,7 +9,8 @@ from PySide6.QtWidgets import (
 )
 
 from ... import uploader
-from ...names import format_size
+from ...schemas.presentation import TableData
+from ...utils.sizes import format_size
 from ...utils.text import again, plural
 from ..icon_set import icon_html
 from ..rows import action_text, total_text
@@ -20,7 +21,7 @@ from .tree_items import children
 
 class Selection(ReleaseActions):
     # A selected row contributes every game folder at or under it.
-    def units_under(self, item: QTreeWidgetItem) -> set[str]:
+    def units_under(self, item: QTreeWidgetItem) -> Set[str]:
         iid = item.data(0, Qt.ItemDataRole.UserRole)
 
         if iid in self.unit_of:
@@ -33,7 +34,7 @@ class Selection(ReleaseActions):
 
         return found
 
-    def selected_folders(self) -> set[str]:
+    def selected_folders(self) -> Set[str]:
         found = set()
 
         for item in self.tree.selectedItems():
@@ -42,7 +43,7 @@ class Selection(ReleaseActions):
         return found
 
     # A game row stands for the release files shown under it.
-    def chosen_keys(self) -> list[str]:
+    def chosen_keys(self) -> List[str]:
         keys = []
 
         # While comparing, the chosen release is the left panel.
@@ -60,14 +61,14 @@ class Selection(ReleaseActions):
         return keys
 
     # Folders whose files the chosen release already holds.
-    def on_release(self) -> set[str]:
+    def on_release(self) -> Set[str]:
         job = self.vault.upload_snapshot()
         keys = {uploader.parts.group_key(name=asset.name) for asset in job.assets}
 
         return {folder.name for folder in job.folders if folder.asset in keys}
 
     # Release files that already have a local copy.
-    def local_keys(self) -> set[str]:
+    def local_keys(self) -> Set[str]:
         return {folder.asset for folder in self.vault.upload_snapshot().folders}
 
     # "Upload" becomes "Re-upload" when every named folder is already on the release.
@@ -78,12 +79,12 @@ class Selection(ReleaseActions):
     def download_text(self, text: str, keys: Collection[str]) -> str:
         return again(text=text, done=bool(keys) and set(keys) <= self.local_keys())
 
-    def selected_assets(self) -> list[str]:
+    def selected_assets(self) -> List[str]:
         return [name for key in self.chosen_keys() for name in self.asset_groups[key]]
 
-    def asset_rows_for(self, keys: list[str]) -> tuple[tuple[str, ...], list[tuple[str, ...]], str]:
+    def asset_rows_for(self, keys: List[str]) -> TableData:
         local = {folder.asset for folder in self.vault.upload_snapshot().folders}
-        rows: list[tuple[str, ...]] = [
+        rows: List[Tuple[str, ...]] = [
             (
                 key,
                 f"{len(self.asset_groups[key])} parts" if len(self.asset_groups[key]) > 1 else "1 file",
@@ -96,7 +97,11 @@ class Selection(ReleaseActions):
         ]
         total = sum(self.asset_sizes.get(key, 0) for key in keys)
 
-        return ("Release file", "Files", "Size", "Updated", "Local copy"), rows, total_text(size=total)
+        return TableData(
+            columns=("Release file", "Files", "Size", "Updated", "Local copy"),
+            rows=rows,
+            total=total_text(size=total),
+        )
 
     @property
     def comparing(self) -> bool:
@@ -104,20 +109,22 @@ class Selection(ReleaseActions):
 
     # A split download fails as one item, so its parts count once.
     @staticmethod
-    def retry_count(kind: str, names: list[str]) -> int:
+    def retry_count(kind: str, names: List[str]) -> int:
         return len(names) if kind == "upload" else len({uploader.parts.group_key(name=name) for name in names})
 
     # The failed ones among the chosen rows: source folders after an upload, release files after a download.
-    def chosen_retry(self) -> list[str]:
-        kind, names, tag = self.retry_job
+    def chosen_retry(self) -> List[str]:
+        kind, names, tag = self.retry_job.kind, self.retry_job.names, self.retry_job.tag
 
         if tag != self.tag:
             return []
 
         if kind == "upload" and not self.comparing:
             chosen = self.selected_folders()
+
         elif kind == "download":
             chosen = set(self.selected_assets())
+
         else:
             return []
 
@@ -193,7 +200,7 @@ class Selection(ReleaseActions):
         self.rename_action.setEnabled(known)
         self.delete_release_action.setEnabled(known)
         self.create_action.setEnabled(bool(self.repo) and not busy)
-        kind, names, retry_tag = self.retry_job
+        kind, names, retry_tag = self.retry_job.kind, self.retry_job.names, self.retry_job.tag
         failed = self.retry_count(kind=kind, names=names) if retry_tag == tag else 0
         picked = self.retry_count(kind=kind, names=self.chosen_retry())
         self.set_action(action=self.retry_all_action, text="Retry all", count=failed, enabled=bool(failed) and not busy)
@@ -204,12 +211,12 @@ class Selection(ReleaseActions):
         self.retry_button.setVisible(bool(failed))
 
     # Right-clicking a row offers what can be done with the chosen rows.
-    def attach_menu(self, tree: QTreeWidget, entries: Iterable[QAction | None]) -> None:
+    def attach_menu(self, tree: QTreeWidget, entries: Iterable[Optional[QAction]]) -> None:
         shown = list(entries)
         tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         tree.customContextMenuRequested.connect(lambda point: self.open_menu(tree=tree, entries=shown, point=point))
 
-    def open_menu(self, tree: QTreeWidget, entries: list[QAction | None], point: QPoint) -> None:
+    def open_menu(self, tree: QTreeWidget, entries: List[Optional[QAction]], point: QPoint) -> None:
         self.paint_choice()
         menu = fill_menu(menu=QMenu(self), entries=entries)
         menu.exec(tree.viewport().mapToGlobal(point))

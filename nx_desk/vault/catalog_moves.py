@@ -1,8 +1,10 @@
-from pathlib import Path
+from typing import List, Optional
 
 from .. import uploader
 from ..names import art_slug
 from ..schemas.catalog import Catalog
+from ..schemas.files import FileMove
+from ..schemas.github import ReleaseRenames
 from ..schemas.state import RELEASE_STATE, ReleaseState
 from .github_job import GitHubJob
 from .jobs import Jobs
@@ -12,7 +14,7 @@ from .release_state import ReleaseStates
 # Renaming a catalog also renames its folder, which is the name of its release on GitHub, so the two stay linked.
 class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
     # The folder a name gives: its slug, made unique among the other catalogs.
-    def _free_folder(self, name: str, skip: Catalog | None = None) -> str:
+    def _free_folder(self, name: str, skip: Optional[Catalog] = None) -> str:
         taken = {catalog.folder for catalog in self.catalogs if catalog is not skip}
         slug = art_slug(name=name) or "catalog"
         folder, number = slug, 2
@@ -23,14 +25,14 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
         return folder
 
     # Everything on disk that carries the folder name: the catalog's own folder, its downloads and its art.
-    def _folder_paths(self, old: str, new: str) -> list[tuple[Path, Path]]:
+    def _folder_paths(self, old: str, new: str) -> List[FileMove]:
         places = (self.catalogs_dir, self._download_root(), self.base / "covers")
-        pairs = [(place / old, place / new) for place in places]
+        pairs = [FileMove(source=place / old, target=place / new) for place in places]
 
-        return [(source, target) for source, target in pairs if source.exists() or target.exists()]
+        return [pair for pair in pairs if pair.source.exists() or pair.target.exists()]
 
     # The repositories where a catalog's release may live: the one for automatic uploads and the GitHub tab's.
-    def _release_repos(self) -> list[str]:
+    def _release_repos(self) -> List[str]:
         repos = [self.auto_repo, self.upload_repo]
 
         return list(dict.fromkeys(repo for repo in repos if uploader.releases.REPO_NAME.match(string=repo)))
@@ -38,7 +40,7 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
     # Gives the catalog the folder `new`, with its release, files and downloads. Returns what to tell the user.
     # Nothing changes when it cannot be done in full: a release is only renamed when gh can do it everywhere it
     # lives, and the folder only follows when that worked, so the catalog and its release stay linked.
-    def _rename_folder(self, catalog: Catalog, new: str) -> list[str]:
+    def _rename_folder(self, catalog: Catalog, new: str) -> List[str]:
         old = catalog.folder
 
         with self.lock:
@@ -47,18 +49,22 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
 
             pairs = self._folder_paths(old=old, new=new)
 
-            if any(target.exists() for _, target in pairs):
+            if any(pair.target.exists() for pair in pairs):
                 return [f"The folder kept its name, {new} is already used."]
 
         try:
             self._login()
+
         except uploader.command.GhError:
             return ["The folder and its release kept their names, since gh is not available."]
 
-        renamed, notes = self._rename_releases(old=old, new=new)
+        renames = self._rename_releases(old=old, new=new)
+        renamed = renames.repos
+        notes = renames.notes
 
         try:
             self._move_paths(pairs=pairs)
+
         except OSError as error:
             self._undo_releases(repos=renamed, old=old, new=new)
 
@@ -70,12 +76,13 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
 
     # Renames the release in each repository that has one, or none at all, and removes the old tag it leaves behind.
     # Returns the repositories it changed and what to tell the user.
-    def _rename_releases(self, old: str, new: str) -> tuple[list[str], list[str]]:
-        found: list[str] = []
+    def _rename_releases(self, old: str, new: str) -> ReleaseRenames:
+        found: List[str] = []
 
         for repo in self._release_repos():
             try:
                 tags = uploader.releases.list_releases(repo=repo)
+
             except uploader.command.GhError as error:
                 raise ValueError(f"could not read the releases of {repo}: {error}") from error
 
@@ -85,13 +92,14 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
             if old in tags:
                 found.append(repo)
 
-        done: list[str] = []
-        notes: list[str] = []
+        done: List[str] = []
+        notes: List[str] = []
 
         for repo in found:
             try:
                 with self.github_lock:
                     uploader.releases.rename_release(repo=repo, tag=old, new_tag=new)
+
             except uploader.command.GhError as error:
                 self._undo_releases(repos=done, old=old, new=new)
 
@@ -102,19 +110,21 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
 
             if uploader.releases.delete_tag(repo=repo, tag=old):
                 notes.append(f"Renamed the release to {new} in {repo} and removed its old tag {old}.")
+
             else:
                 notes.append(f"Renamed the release to {new} in {repo}, but its old tag {old} could not be removed.")
                 self._log_github(text=f"Could not remove the old tag {old} in {repo}", level="warn")
 
-        return done, notes
+        return ReleaseRenames(repos=done, notes=notes)
 
     # Best effort: a release already renamed goes back, with the tag it made going too, so a failure leaves the
     # catalog and its repositories as they were.
-    def _undo_releases(self, repos: list[str], old: str, new: str) -> None:
+    def _undo_releases(self, repos: List[str], old: str, new: str) -> None:
         for repo in repos:
             try:
                 with self.github_lock:
                     uploader.releases.rename_release(repo=repo, tag=new, new_tag=old)
+
             except uploader.command.GhError as error:
                 self._log_github(text=f"Could not rename release {new} back to {old} in {repo}: {error}", level="error")
 
@@ -123,22 +133,26 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
             uploader.releases.delete_tag(repo=repo, tag=new)
 
     @staticmethod
-    def _move_paths(pairs: list[tuple[Path, Path]]) -> None:
-        done: list[tuple[Path, Path]] = []
+    def _move_paths(pairs: List[FileMove]) -> None:
+        done: List[FileMove] = []
 
         try:
-            for source, target in pairs:
+            for pair in pairs:
+                source, target = pair.source, pair.target
+
                 if source.exists():
                     source.rename(target)
-                    done.append((source, target))
+                    done.append(pair)
+
         except OSError:
-            for source, target in reversed(done):
+            for pair in reversed(done):
+                source, target = pair.source, pair.target
                 target.rename(source)
 
             raise
 
     # The catalog now lives under its new folder: fix what points at the old one.
-    def _take_folder(self, catalog: Catalog, old: str, new: str, repos: list[str]) -> None:
+    def _take_folder(self, catalog: Catalog, old: str, new: str, repos: List[str]) -> None:
         cache = self._release_cache(folder=new)
         state = self._load_model(path=cache, schema=RELEASE_STATE, default=ReleaseState())
 

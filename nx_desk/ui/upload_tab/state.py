@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
@@ -14,6 +14,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...schemas.github import RetryState
+from ...schemas.presentation import CompareStamp, UploadPaintStamp
+from ..layout_models import LegendNote
 from ..widgets.log_pane import LogPane
 from ..widgets.spinner import Spinner
 from ..widgets.view_switch import ViewSwitch
@@ -27,30 +30,30 @@ if TYPE_CHECKING:
 class UploadTabState(QWidget):
     app: "App"
     vault: "Vault"
-    painted: tuple[object, ...] | None
-    shown_tree: int | None
-    shown_releases: int | None
-    shown_repos: int | None
-    shown_assets: tuple[int, int] | None
-    shown_source: int | None
+    painted: Optional[UploadPaintStamp]
+    shown_tree: Optional[int]
+    shown_releases: Optional[int]
+    shown_repos: Optional[int]
+    shown_assets: Optional[Tuple[int, int]]
+    shown_source: Optional[int]
     reported_runs: int
     reported_alerts: int
-    asset_groups: dict[str, list[str]]
-    known_releases: list[str]
-    legend: dict[str, tuple[QLabel, str]]
-    unit_of: dict[str, str]
-    unit_iid: dict[str, str]
-    rows: dict[str, QTreeWidgetItem]
-    asset_rows: dict[str, QTreeWidgetItem]
-    asset_sizes: dict[str, int]
-    asset_updated: dict[str, str]
-    known_groups: set[str]
+    asset_groups: Dict[str, List[str]]
+    known_releases: List[str]
+    legend: Dict[str, LegendNote]
+    unit_of: Dict[str, str]
+    unit_iid: Dict[str, str]
+    rows: Dict[str, QTreeWidgetItem]
+    asset_rows: Dict[str, QTreeWidgetItem]
+    asset_sizes: Dict[str, int]
+    asset_updated: Dict[str, str]
+    known_groups: Set[str]
     # Kind, names and release of what failed last, which Retry and Retry all run again.
-    retry_job: tuple[str, list[str], str]
-    shown_compare: tuple[int, int, str] | None
-    compare_titles: list[QLabel]
-    compare_notes: list[dict[str, QLabel]]
-    compare_trees: list[QTreeWidget]
+    retry_job: RetryState
+    shown_compare: Optional[CompareStamp]
+    compare_titles: List[QLabel]
+    compare_notes: List[Dict[str, QLabel]]
+    compare_trees: List[QTreeWidget]
     bodies: QStackedWidget
     compare_box: QComboBox
     compare_button: QPushButton

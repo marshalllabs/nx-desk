@@ -3,8 +3,8 @@ import os
 import tempfile
 import threading
 import unittest
-from collections.abc import Callable
 from pathlib import Path
+from typing import Callable, Dict, Optional
 from unittest import mock
 
 from nx_desk import net, vault
@@ -17,9 +17,9 @@ class CappedServer:
         self.cap = cap
         self.calls = 0
 
-    def __call__(self, url: str, headers: dict[str, str] | None = None) -> mock.MagicMock:
+    def __call__(self, url: str, headers: Optional[Dict[str, str]] = None) -> mock.MagicMock:
         self.calls += 1
-        start = int(headers["Range"][6:].split("-")[0]) if headers else 0
+        start = int(headers["Range"][6:].split(sep="-")[0]) if headers else 0
         piece = self.data[start : start + self.cap]
         response = mock.MagicMock()
         response.status = 206
@@ -39,7 +39,7 @@ class CappedDownloadTests(unittest.TestCase):
             store.jobs["game"] = job(phase="downloading", total=size)
             part = Path(folder) / "game.part"
 
-            with mock.patch.object(net, "http_get", server):
+            with mock.patch.object(target=net, attribute="http_get", new=server):
                 store._fetch(entry=item, url="https://x.test/a.zip", part=part, cancel=threading.Event())
 
             return part.read_bytes()
@@ -47,21 +47,21 @@ class CappedDownloadTests(unittest.TestCase):
     def test_keeps_asking_when_a_server_caps_each_reply(self) -> None:
         data = os.urandom(5000)
         server = CappedServer(data=data, cap=2000)
-        self.assertEqual(self.fetch(server=server, size=5000), data)
-        self.assertEqual(server.calls, 3)
+        self.assertEqual(first=self.fetch(server=server, size=5000), second=data)
+        self.assertEqual(first=server.calls, second=3)
 
     def test_works_when_the_catalog_gives_no_size(self) -> None:
         data = os.urandom(5000)
-        self.assertEqual(self.fetch(server=CappedServer(data=data, cap=2000), size=0), data)
+        self.assertEqual(first=self.fetch(server=CappedServer(data=data, cap=2000), size=0), second=data)
 
     def test_a_server_that_stops_sending_is_still_an_error(self) -> None:
         server = CappedServer(data=os.urandom(100), cap=100)
 
-        with self.assertRaises(OSError):
+        with self.assertRaises(expected_exception=OSError):
             self.fetch(server=server, size=5000)
 
     def test_a_cut_reply_without_range_support_is_still_an_error(self) -> None:
-        def plain(url: str, headers: dict[str, str] | None = None) -> mock.MagicMock:
+        def plain(url: str, headers: Optional[Dict[str, str]] = None) -> mock.MagicMock:
             response = mock.MagicMock()
             response.status = 200
             response.headers = {}
@@ -70,5 +70,5 @@ class CappedDownloadTests(unittest.TestCase):
 
             return response
 
-        with self.assertRaises(OSError):
+        with self.assertRaises(expected_exception=OSError):
             self.fetch(server=plain, size=5000)

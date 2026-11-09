@@ -1,5 +1,6 @@
 import difflib
 import unicodedata
+from typing import List
 
 
 # Only letters and digits, in lower case and without accents, so names that differ in marks compare equal.
@@ -32,7 +33,7 @@ def plural(count: int, word: str) -> str:
 
 
 # The first few names, then how many more.
-def few_names(names: list[str], shown: int = 3) -> str:
+def few_names(names: List[str], shown: int = 3) -> str:
     text = ", ".join(names[:shown])
 
     return f"{text} and {len(names) - shown} more" if len(names) > shown else text

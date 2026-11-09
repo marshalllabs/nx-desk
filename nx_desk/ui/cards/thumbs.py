@@ -1,20 +1,18 @@
 import collections
 import threading
-from collections.abc import Callable
 from pathlib import Path
+from typing import Callable, Optional, OrderedDict, Set
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 
+from ...schemas.artwork import ArtFiles
 from .layout import MAX_COVER
 
 # Thumbnails kept in memory (about 330 KB each) and decoded at once; a request that no longer matters is dropped.
 KEPT = 150
 THREADS = 2
 MOST_WAITING = 60
-
-# A cover and a background on disk; either may be missing.
-Files = tuple[Path | None, Path | None]
 
 
 # The cover of a card, cut to fill the biggest cover a card can have, from art files on disk. Decoding an image
@@ -24,7 +22,7 @@ Files = tuple[Path | None, Path | None]
 class CoverThumbs:
     def __init__(
         self,
-        files: Callable[[str], Files | None],
+        files: Callable[[str], Optional[ArtFiles]],
         version: Callable[[], object],
         settled: Callable[[str], bool],
     ) -> None:
@@ -33,18 +31,18 @@ class CoverThumbs:
         self.settled = settled
         self.version = version()
         self.lock = threading.Lock()
-        self.images: collections.OrderedDict[str, QImage] = collections.OrderedDict()
-        self.waiting: collections.OrderedDict[str, Path] = collections.OrderedDict()
-        self.failed: set[str] = set()
+        self.images: OrderedDict[str, QImage] = collections.OrderedDict()
+        self.waiting: OrderedDict[str, Path] = collections.OrderedDict()
+        self.failed: Set[str] = set()
         self.workers = 0
         # Counts the thumbnails built, so a view knows when to draw again.
         self.ready = 0
 
     # The art file of an entry that has some, else None.
-    def source(self, key: str) -> Path | None:
+    def source(self, key: str) -> Optional[Path]:
         files = self.files(key)
 
-        return (files[0] or files[1]) if files else None
+        return (files.cover or files.background) if files else None
 
     # An entry that was looked up and has no art, or whose art cannot be read: it shows an icon.
     def shows_icon(self, key: str) -> bool:
@@ -54,7 +52,7 @@ class CoverThumbs:
             return bare or key in self.failed
 
     # The thumbnail if it is ready; otherwise None, and it is made in the background.
-    def get(self, key: str) -> QImage | None:
+    def get(self, key: str) -> Optional[QImage]:
         version = self.current()
         path = self.source(key=key)
 
@@ -105,6 +103,7 @@ class CoverThumbs:
 
                 if image is None:
                     self.failed.add(key)
+
                 else:
                     self.images[key] = image
                     self.ready += 1
@@ -113,7 +112,7 @@ class CoverThumbs:
                         self.images.popitem(last=False)
 
     @staticmethod
-    def build(path: Path) -> QImage | None:
+    def build(path: Path) -> Optional[QImage]:
         image = QImage(str(path))
 
         if image.isNull():

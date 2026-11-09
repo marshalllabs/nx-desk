@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterable
+from typing import Callable, Dict, Iterable, Optional, Tuple
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
@@ -21,7 +21,7 @@ from ..icon_set import ICON_SIZE, icon
 from ..style import set_role
 
 
-def label(text: str = "", role: str | None = None, parent: QWidget | None = None) -> QLabel:
+def label(text: str = "", role: Optional[str] = None, parent: Optional[QWidget] = None) -> QLabel:
     widget = QLabel(text, parent)
 
     if role:
@@ -32,9 +32,9 @@ def label(text: str = "", role: str | None = None, parent: QWidget | None = None
 
 def button(
     text: str,
-    action: Callable[[], object] | None = None,
-    role: str | None = None,
-    parent: QWidget | None = None,
+    action: Optional[Callable[[], object]] = None,
+    role: Optional[str] = None,
+    parent: Optional[QWidget] = None,
 ) -> QPushButton:
     widget = QPushButton(text, parent)
     widget.setAutoDefault(False)
@@ -54,10 +54,11 @@ TOOL_ARROW = 24
 
 
 # Fills a menu; None in entries puts a separator there.
-def fill_menu(menu: QMenu, entries: Iterable[QAction | None]) -> QMenu:
+def fill_menu(menu: QMenu, entries: Iterable[Optional[QAction]]) -> QMenu:
     for entry in entries:
         if entry is None:
             menu.addSeparator()
+
         else:
             menu.addAction(entry)
 
@@ -102,7 +103,7 @@ def separator(height: int = 22) -> QFrame:
     return line
 
 
-def tool(action: QAction, role: str | None = None, menu: Iterable[QAction | None] = ()) -> QToolButton:
+def tool(action: QAction, role: Optional[str] = None, menu: Iterable[Optional[QAction]] = ()) -> QToolButton:
     entries = list(menu)
     widget = FitButton(room=TOOL_PADDING + (TOOL_ARROW if entries else 0))
 
@@ -137,7 +138,7 @@ def tool(action: QAction, role: str | None = None, menu: Iterable[QAction | None
 
 
 # A button that only opens a menu, such as the "more" icon for the less used actions.
-def menu_button(text: str, entries: Iterable[QAction | None], tip: str = "", glyph: str = "") -> QToolButton:
+def menu_button(text: str, entries: Iterable[Optional[QAction]], tip: str = "", glyph: str = "") -> QToolButton:
     widget = QToolButton()
     widget.setText(text)
 
@@ -154,7 +155,7 @@ def menu_button(text: str, entries: Iterable[QAction | None], tip: str = "", gly
     return widget
 
 
-def row(*widgets: QWidget | None, spacing: int = 6, margins: tuple[int, int, int, int] = (0, 0, 0, 0)) -> QWidget:
+def row(*widgets: Optional[QWidget], spacing: int = 6, margins: Tuple[int, int, int, int] = (0, 0, 0, 0)) -> QWidget:
     holder = QWidget()
     layout = QHBoxLayout(holder)
     layout.setContentsMargins(*margins)
@@ -163,6 +164,7 @@ def row(*widgets: QWidget | None, spacing: int = 6, margins: tuple[int, int, int
     for widget in widgets:
         if widget is None:
             layout.addStretch(1)
+
         else:
             layout.addWidget(widget)
 
@@ -171,7 +173,7 @@ def row(*widgets: QWidget | None, spacing: int = 6, margins: tuple[int, int, int
 
 # A box shows nothing rather than its first entry when the saved choice is empty.
 # Each item holds its value, shown as its label when labels has one; choice() reads the value back.
-def fill_choices(box: QComboBox, choices: Iterable[str], current: str, labels: dict[str, str] | None = None) -> None:
+def fill_choices(box: QComboBox, choices: Iterable[str], current: str, labels: Optional[Dict[str, str]] = None) -> None:
     choices = list(choices)
 
     if current and current not in choices:
@@ -201,6 +203,7 @@ def copy_text(text: str) -> None:
 def run_bar(bar: QProgressBar, loading: bool) -> None:
     if loading and bar.maximum():
         bar.setRange(0, 0)
+
     elif not loading and not bar.maximum():
         bar.setRange(0, 1000)
         bar.setValue(0)

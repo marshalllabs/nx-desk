@@ -1,15 +1,15 @@
 import queue
 import sys
 import threading
-from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Callable, Optional
 
 from PySide6.QtCore import QLoggingCategory, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QTabWidget, QVBoxLayout, QWidget
 
 from ..config import app_version
+from ..schemas.presentation import UiCall
 from ..schemas.update import AppUpdate, UpdateJob
 from ..system import can_self_update, open_in_system, restart_program
 from ..vault import Vault
@@ -39,19 +39,27 @@ class App(QMainWindow):
         # The line is not at the warning level, so the whole category is turned off, not only its warnings.
         QLoggingCategory.setFilterRules("qt.gui.imageio=false")
         # The one QApplication of the process, made here when nothing made it before.
-        self.qt = cast(QApplication, QApplication.instance() or QApplication(sys.argv))
+        instance = QApplication.instance()
+
+        if instance is None:
+            instance = QApplication(sys.argv)
+
+        if not isinstance(instance, QApplication):
+            raise RuntimeError("The UI requires a QApplication")
+
+        self.qt = instance
         self.qt.setApplicationName("NX Desk")
         QApplication.setWindowIcon(QIcon(str(ICON)))
         style.apply(app=self.qt, family=vault.font_family, size=vault.font_size)
         super().__init__()
         self.vault = vault
         self.notifier = Notifier(window=self, icon_path=ICON)
-        self.manager: CatalogManager | None = None
-        self.app_update: AppUpdate | None = None
-        self.prompted_tag: str | None = None
+        self.manager: Optional[CatalogManager] = None
+        self.app_update: Optional[AppUpdate] = None
+        self.prompted_tag: Optional[str] = None
         self.closing = False
         # Work from other threads that must touch the UI waits here for the next repaint.
-        self.pending: queue.Queue[tuple[Callable[..., object], tuple[object, ...]]] = queue.Queue()
+        self.pending: queue.Queue[UiCall] = queue.Queue()
         self.setWindowTitle(f"NX Desk {app_version()}")
         self.resize(1640, 900)
         # The Catalog tab's detail pane can shrink and its Genres column hides, so laptops fit too.
@@ -154,7 +162,7 @@ class App(QMainWindow):
             self.notifier.show(title=title, text=text)
 
     def later(self, action: Callable[..., object], *args: object) -> None:
-        self.pending.put(item=(action, args))
+        self.pending.put(item=UiCall(action=action, args=args))
 
     def set_footer(self, text: str, error: bool = False) -> None:
         self.footer.setText(text)
@@ -185,7 +193,9 @@ class App(QMainWindow):
 
         # Popups run their own loop, so the queue is drained after the repaint and one at a time.
         try:
-            action, args = self.pending.get_nowait()
+            pending = self.pending.get_nowait()
+            action, args = pending.action, pending.args
+
         except queue.Empty:
             return
 
@@ -195,11 +205,12 @@ class App(QMainWindow):
         if self.vault.art_busy():
             self.art_note.show()
             self.art_spinner.start(text="Fetching artwork from SteamGridDB…")
+
         else:
             self.art_spinner.stop()
             self.art_note.hide()
 
-    def paint_app_update(self, update: AppUpdate | None, job: UpdateJob | None) -> None:
+    def paint_app_update(self, update: Optional[AppUpdate], job: Optional[UpdateJob]) -> None:
         self.app_update = update
 
         if not update:
@@ -220,8 +231,10 @@ class App(QMainWindow):
 
         if job and phase == "downloading":
             text = f"Updating {100 * job.done // max(1, (job.total or 1))}%"
+
         elif phase == "installing":
             text = "Installing update"
+
         else:
             text = f"New version {update.tag}"
 
@@ -262,12 +275,14 @@ class App(QMainWindow):
 
         if not can_self_update(update=update):
             open_in_system(path=update.url)
+
         elif any(job.phase != "error" for job in self.vault.snapshot_jobs()):
             show_message(
                 title="Downloading",
                 message="Wait for downloads to finish before updating the app.",
                 parent=self,
             )
+
         else:
             self.vault.set_update_job(phase="queued", done=0, total=1)
             threading.Thread(target=self.vault.install_app_update, args=(update,), daemon=True).start()
