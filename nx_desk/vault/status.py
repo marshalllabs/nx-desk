@@ -24,7 +24,7 @@ class Statuses(Jobs, ReleaseStates):
         folders = {game_folder(name=name, mod=self.mod_name) for name in names}
         folders |= {f"{safe_name(name=name)} - [{self.mod_name}]" for name in names}
         # The version is part of the folder name now, so any version of this game counts.
-        starts = tuple(f"{game_folder(name=name, mod=self.mod_name)} - [" for name in names)
+        starts = tuple(f"{folder} - [" for folder in folders)
 
         try:
             folders |= {name for name in os.listdir(path=self.root) if name.startswith(starts) and name.endswith("]")}
