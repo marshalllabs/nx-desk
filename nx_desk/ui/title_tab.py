@@ -3,10 +3,9 @@ import threading
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
-from PySide6.QtGui import QAction, QFont, QFontDatabase, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QApplication,
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
@@ -21,7 +20,7 @@ from ..schemas.presentation import Column
 from ..schemas.title import TitleRow, TitleSnapshot
 from ..utils.text import plural
 from .rows import SortState
-from .style import set_role
+from .style import mono_font, set_role
 from .widgets.basics import button, clear_on_escape, copy_text, focus_box, label
 from .widgets.spinner import Spinner
 
@@ -32,18 +31,11 @@ SECTIONS = (("", "All"), ("games", "Games"), ("system", "System"), ("sysmodules"
 SECTION_TYPES = {"games": "Game", "system": "System", "sysmodules": "Sysmodule"}
 # Name is wide but resizable; the last column takes what is left, so Type and Group sit beside the name.
 COLUMNS: Tuple[Column, ...] = (
-    Column(key="id", title="Title ID", width=190),
     Column(key="name", title="Name", width=620),
+    Column(key="id", title="Title ID", width=190),
     Column(key="kind", title="Type", width=120),
     Column(key="detail", title="Group", width=0),
 )
-
-
-def mono_font() -> QFont:
-    font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
-    font.setPointSize(QApplication.font().pointSize())
-
-    return font
 
 
 # A title row with its type spelled out for the Type column.
@@ -78,7 +70,7 @@ class TitleModel(QAbstractTableModel):
             return cell(row=self.rows[index.row()], column=COLUMNS[index.column()].key)
 
         # Title IDs are 16 hex digits; a fixed-width font keeps them aligned and easy to compare.
-        if role == Qt.ItemDataRole.FontRole and index.column() == 0:
+        if role == Qt.ItemDataRole.FontRole and COLUMNS[index.column()].key == "id":
             return mono_font()
 
         return None

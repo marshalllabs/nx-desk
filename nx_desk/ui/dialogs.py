@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -187,7 +188,8 @@ def detail_table(columns: Sequence[str], rows: Sequence[Sequence[str]], parent: 
     frame = 2 * table.frameWidth()
     scroll = table.verticalScrollBar().sizeHint().width() if len(rows) > TABLE_LINES else 0
     screen = (parent.screen() if parent else table.screen()).availableGeometry()
-    table.setFixedWidth(min(sum(widths) + frame + scroll, int(screen.width() * 0.7)))
+    table.setMinimumWidth(min(sum(widths) + frame + scroll, int(screen.width() * 0.7)))
+    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     table.setFixedHeight(header.sizeHint().height() + TABLE_ROW * min(len(rows), TABLE_LINES) + frame)
 
     return table
