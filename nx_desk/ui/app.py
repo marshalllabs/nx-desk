@@ -21,6 +21,7 @@ from .homebrews_tab.tab import HomebrewsTab
 from .notifier import Notifier
 from .ports_tab.tab import PortsTab
 from .settings_window import SettingsWindow
+from .switch_sd.tab import SwitchSDTab
 from .theme import SPACE
 from .title_tab import TitleTab
 from .upload_tab.tab import UploadTab
@@ -76,7 +77,9 @@ class App(QMainWindow):
         self.ports = PortsTab(app=self)
         self.homebrews = HomebrewsTab(app=self)
         self.title_ids = TitleTab(app=self)
+        self.switch_sd = SwitchSDTab(app=self)
         self.tabs.addTab(self.catalog, "Catalog")
+        self.tabs.addTab(self.switch_sd, "Switch SD")
         self.tabs.addTab(self.ports, "Switch Ports")
         self.tabs.addTab(self.homebrews, "Homebrews")
         self.tabs.addTab(self.title_ids, "Title IDs")
@@ -150,7 +153,7 @@ class App(QMainWindow):
     def focus_search(self) -> None:
         current = self.tabs.currentWidget()
 
-        if isinstance(current, (CatalogTab, UploadTab, PortsTab, HomebrewsTab, TitleTab)):
+        if isinstance(current, (CatalogTab, UploadTab, PortsTab, HomebrewsTab, TitleTab, SwitchSDTab)):
             current.focus_search()
 
     def step_tab(self, step: int) -> None:
@@ -185,6 +188,7 @@ class App(QMainWindow):
         self.ports.paint(job=self.vault.port_snapshot())
         self.homebrews.paint(job=self.vault.homebrew_snapshot())
         self.title_ids.paint(job=self.vault.title_snapshot())
+        self.switch_sd.paint(job=self.vault.switch_snapshot())
         self.paint_app_update(update=snapshot.app_update, job=snapshot.app_update_job)
         self.paint_art_note()
 
@@ -273,6 +277,15 @@ class App(QMainWindow):
         if update is None:
             return
 
+        if self.vault.switch_snapshot().phase != "idle":
+            show_message(
+                title="Switch SD",
+                message="Wait for the card operation to finish before updating the app.",
+                parent=self,
+            )
+
+            return
+
         if not can_self_update(update=update):
             open_in_system(path=update.url)
 
@@ -299,6 +312,12 @@ class App(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         if self.closing:
             event.accept()
+
+            return
+
+        if self.vault.switch_snapshot().phase != "idle":
+            show_message(title="Switch SD", message="Finish or cancel the card operation before quitting.", parent=self)
+            event.ignore()
 
             return
 

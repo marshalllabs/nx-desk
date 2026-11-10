@@ -46,6 +46,7 @@ from ..schemas.notice import Notice
 from ..schemas.port import Port
 from ..schemas.registry import REGISTRY, Registry
 from ..schemas.state import DOWNLOAD_RECORDS, RELEASE_STATE, DownloadRecord, ReleaseState
+from ..schemas.switch_sd import SDSnapshot
 from ..schemas.title import TitleRow
 from ..schemas.update import AppUpdate, UpdateJob
 from ..utils.json import parse_json
@@ -103,6 +104,9 @@ class VaultBase:
         self.upload_cancel = threading.Event()
         # One GitHub job at a time: manual uploads, downloads and deletes, and automatic uploads.
         self.github_lock = threading.Lock()
+        self.sd_lock = threading.Lock()
+        self.sd_cancel = threading.Event()
+        self.sd_job = SDSnapshot()
         self.auto_queue: queue.Queue[AutoUpload] = queue.Queue()
         self.auto_thread: Optional[threading.Thread] = None
         self.auto_pending = 0

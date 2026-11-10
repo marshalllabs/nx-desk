@@ -12,6 +12,7 @@
 - Every mod repacked into one layout, at the compression level you choose.
 - Upload to and download from GitHub releases through the GitHub REST API.
 - Ports, Homebrews and Title IDs lists.
+- Detect Switch CFW cards and scan mod content without modifying the card.
 - Updates itself from public GitHub releases; the release repository must be public for update checks and downloads.
 
 ## Install
@@ -79,6 +80,15 @@
 - Metadata repairs preserve uploaded files, their folder and upload time; IDs sharing a file keep their own records.
 - Missing recorded assets count as missing uploads; invalid remote state is never replaced with empty state.
 - Refresh release state to see changes made by the other application; use one writer per release.
+
+## Switch SD
+
+- Detect mounted FAT32/exFAT cards with Atmosphere/CFW markers and automatically select the first card.
+- Scan RomFS, ExeFS and cheats with Title ID/name matching; the card is read-only to the app.
+- Names/categories use all Title IDs groups with active-catalog fallback; filter defaults to Game (All when no Game content exists) and names sort A–Z.
+- Search by Title ID or name; cancel scans when needed. Unknown fields stay blank.
+- Read and verify existing NX Desk metadata when present; no mod copy, install or removal actions.
+- Installed game/update/DLC versions and runtime activation are not detected; see [card scanning](docs/switch-sd.md).
 
 ## Other tabs
 

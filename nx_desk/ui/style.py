@@ -242,3 +242,10 @@ def application() -> QApplication:
         raise RuntimeError("The UI requires a QApplication")
 
     return instance
+
+
+def mono_font() -> QFont:
+    font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+    font.setPointSize(QApplication.font().pointSize())
+
+    return font

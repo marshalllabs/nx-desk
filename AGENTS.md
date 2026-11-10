@@ -38,6 +38,7 @@
 | `credentials.py`, `steamgriddb.py` | Secret storage and artwork service access |
 | `names.py`, `zips.py` | Names, saved paths and archive repackaging |
 | `catalog/` | Untrusted catalog parsing and reference-list readers |
+| `switch_sd/` | Read-only CFW card detection, content scanning and metadata verification |
 | `uploader/` | GitHub REST requests, releases, transfers, parts and release state |
 | `vault/` | Application state and jobs, split into mixins |
 | `cli.py` | Startup and background check loop |
@@ -97,6 +98,16 @@
   - Asset redirects never forward tokens to storage hosts; never import credentials from `gh`.
   - Repository visibility and public read access do not prove token write permissions.
 - Preserve split/join support for files over 2 GB and restrict automatic retries to safe operations.
+
+## Switch SD
+
+- Follow `docs/switch-sd.md`; Qt mount enumeration stays under `ui/switch_sd/`, filesystem work under `switch_sd/`.
+- Scan only supported mounted volumes with CFW markers; never inspect Nintendo game storage, keys or raw NAND.
+- Content folders are not evidence of installed games; never infer game versions from mod folders.
+- Keep Switch SD read-only: auto-select a card, scan, search and filter; do not add copy/install/removal actions.
+- Read existing metadata for compatibility; never clean up old metadata, backups or journals on the card.
+- Keep scan cancellation and disconnection guards.
+- Test with synthetic card directories and mocked mount discovery; never use real cards as agent verification.
 
 ## Data and credentials
 
