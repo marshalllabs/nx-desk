@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, JsonValue, field_validator
 
@@ -69,10 +69,6 @@ class ReleasePayload(BaseModel):
         return [ReleaseDownload.model_validate(obj=row) for row in value if isinstance(row, dict)]
 
 
-class GitHubError(BaseModel):
-    message: str = ""
-
-
 class SteamReply(BaseModel):
     success: bool = False
     data: Optional[List[JsonValue]] = None
@@ -108,3 +104,20 @@ class SteamGame(BaseModel):
 
 class SteamImage(BaseModel):
     url: str
+
+
+class ReleaseCreate(BaseModel):
+    tag_name: str
+    name: str
+    body: str = ""
+    make_latest: Literal["false"] = "false"
+
+
+class ReleaseUpdate(BaseModel):
+    tag_name: str
+    name: str
+
+
+class AssetUpdate(BaseModel):
+    name: str
+    label: Optional[str] = None

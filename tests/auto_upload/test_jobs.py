@@ -1,4 +1,4 @@
-import subprocess
+import http.client
 import threading
 from pathlib import Path
 from typing import Optional
@@ -62,7 +62,7 @@ class JobTests(AutoUploadCase):
         with mock.patch.object(
             target=vault.Vault,
             attribute="_upload_one",
-            side_effect=uploader.command.GhError("boom"),
+            side_effect=uploader.command.GitHubError("boom"),
         ):
             self.run_until_saved(item=self.item())
             self.wait_for_uploads()
@@ -92,21 +92,16 @@ class JobTests(AutoUploadCase):
         self.assertTrue(expr=(self.store.root / "Game - [VI] - [1.0]").is_dir())
         self.assertNotIn(member="state.json", container=self.hub.assets)
 
-    def test_a_timed_out_process_is_killed_by_stop(self) -> None:
+    def test_stop_prevents_an_api_call(self) -> None:
         cancel = threading.Event()
         cancel.set()
-        process = mock.Mock()
-        process.communicate.side_effect = [
-            subprocess.TimeoutExpired(cmd="synthetic", timeout=0.2),
-            ("", ""),
-        ]
 
         with (
-            mock.patch.object(target=subprocess, attribute="Popen", return_value=process),
             uploader.command.stoppable(cancel=cancel),
+            mock.patch.object(target=http.client, attribute="HTTPSConnection") as connection,
             self.assertRaises(expected_exception=zips.Cancelled),
+            uploader.api.response(url="https://api.github.com/user"),
         ):
-            uploader.command.run_gh(command="synthetic", args=())
+            pass
 
-        process.kill.assert_called_once()
-        self.assertEqual(first=process.communicate.call_count, second=2)
+        connection.return_value.request.assert_not_called()

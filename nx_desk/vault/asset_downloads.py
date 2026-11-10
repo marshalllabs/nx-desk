@@ -88,7 +88,7 @@ class AssetDownloads(UploadSource):
 
             assets = uploader.releases.remote_assets(repo=repo, tag=tag)
 
-        except (uploader.command.GhError, ValueError, OSError) as error:
+        except (uploader.command.GitHubError, ValueError, OSError) as error:
             with self.lock:
                 alerts = self.upload_job.alerts + 1
 
@@ -175,7 +175,7 @@ class AssetDownloads(UploadSource):
                     self._set_upload(fresh_folders=list(fresh))
                     self._scan_source()
 
-                except (uploader.command.GhError, OSError, zipfile.BadZipFile, shutil.Error) as error:
+                except (uploader.command.GitHubError, OSError, zipfile.BadZipFile, shutil.Error) as error:
                     failures.append(f"{key}: {error}")
                     failed += group
                     self._log_folder(folder_name=owner, text=f"failed: {error}", level="error")

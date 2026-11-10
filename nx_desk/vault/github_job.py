@@ -5,10 +5,10 @@ from .. import uploader
 from ..schemas.download import TransferMark
 from ..schemas.github import Transfer, UploadSnapshot
 from ..utils.sizes import format_size
-from .logs import Logs
+from .github_auth import GitHubAuth
 
 
-class GitHubJob(Logs):
+class GitHubJob(GitHubAuth):
     def upload_snapshot(self) -> UploadSnapshot:
         with self.lock:
             job = self.upload_job
@@ -21,7 +21,7 @@ class GitHubJob(Logs):
                 "source": self.upload_source,
             }
 
-            return UploadSnapshot(**fields, log=list(self.github_log), gh_ready=self.gh_ready)
+            return UploadSnapshot(**fields, log=list(self.github_log), github_ready=self.github_ready)
 
     def _speed(self) -> float:
         with self.lock:
@@ -90,16 +90,6 @@ class GitHubJob(Logs):
             for key, value in fields.items():
                 setattr(self.upload_job, key, value)
 
-    def _login(self) -> None:
-        try:
-            uploader.command.ensure_login()
-
-        except uploader.command.GhError:
-            self.gh_ready = False
-            raise
-
-        self.gh_ready = True
-
     def _checked_repo(self, repo: str) -> str:
         if not uploader.releases.REPO_NAME.match(string=repo):
             raise ValueError("Enter the repository as owner/name")
@@ -111,7 +101,7 @@ class GitHubJob(Logs):
     def _upload_repo(self) -> str:
         return self._checked_repo(repo=self.upload_repo)
 
-    # gh problems need the user to act, so they raise a popup instead of a quiet status line.
+    # Authentication problems need the user to act, so they raise a popup instead of a quiet status line.
     def _run_upload_step(self, phase: str, step: Callable[[], str], quiet: bool = False) -> None:
         self._set_upload(phase=phase, message="Working with GitHub…", failed=False)
 
@@ -122,7 +112,7 @@ class GitHubJob(Logs):
             if message:
                 self._log_github(text=message)
 
-        except (uploader.command.GhError, ValueError, OSError) as error:
+        except (uploader.command.GitHubError, ValueError, OSError) as error:
             with self.lock:
                 alerts = self.upload_job.alerts + (0 if quiet else 1)
 

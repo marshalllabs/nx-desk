@@ -41,9 +41,9 @@ class Header(GameList, Actions):
             show_repo(widget=self.auto_repo_button, repo=picked, repos=self.vault.upload_snapshot().repos)
             threading.Thread(target=self.vault.refresh_release_state, daemon=True).start()
 
-    # These boxes work from what gh reports, so they wait for its first answer.
+    # These boxes work from GitHub authentication, so they wait for its first check.
     def paint_auto_upload(self, github: UploadSnapshot) -> None:
-        ready = github.gh_ready
+        ready = github.github_ready
 
         if github.repo_list != self.shown_auto_repos:
             self.shown_auto_repos = github.repo_list
@@ -59,7 +59,7 @@ class Header(GameList, Actions):
             if chosen
             else "Turn on Upload to GitHub first; a local copy is only deleted after its upload",
         )
-        self.gh_note.setVisible(ready is False)
+        self.github_note.setVisible(ready is False)
 
     def paint_overall(self, batch: BatchProgress, checking: bool = False) -> None:
         run_bar(bar=self.overall_bar, loading=checking and not batch.active)

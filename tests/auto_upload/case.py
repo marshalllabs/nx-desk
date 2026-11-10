@@ -31,7 +31,10 @@ class AutoUploadCase(unittest.TestCase):
         self.hub.releases = ["reviewed"]
 
         for patcher in (
-            mock.patch.object(target=uploader.command, attribute="gh", new=self.hub),
+            mock.patch.object(target=uploader.api, attribute="request", new=self.hub.request),
+            mock.patch.object(target=uploader.api, attribute="pages", new=self.hub.pages),
+            mock.patch.object(target=uploader.download, attribute="asset", new=self.hub.download),
+            mock.patch.object(target=uploader.command, attribute="token", return_value="token"),
             mock.patch.object(target=uploader.upload, attribute="post_asset", new=self.hub.post),
             mock.patch.object(target=net, attribute="http_get"),
         ):

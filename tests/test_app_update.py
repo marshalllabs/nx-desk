@@ -140,7 +140,7 @@ class AppUpdateTests(unittest.TestCase):
             tempfile.TemporaryDirectory() as folder,
             mock.patch.object(target=settings, attribute="load_config", return_value=config),
             mock.patch.object(target=net, attribute="http_get", return_value=response) as get,
-            mock.patch.object(target=uploader.command, attribute="gh") as gh,
+            mock.patch.object(target=uploader.api, attribute="request") as gh,
         ):
             self.assertEqual(first=vault.Vault(base=folder).check_app_update(), second="available")
 
@@ -260,7 +260,7 @@ class SelfUpdateTests(unittest.TestCase):
         with (
             mock.patch.object(target=settings, attribute="load_config", return_value=config),
             mock.patch.object(target=net, attribute="http_get", return_value=response),
-            mock.patch.object(target=uploader.command, attribute="gh") as gh,
+            mock.patch.object(target=uploader.api, attribute="request") as gh,
             mock.patch.object(target=system, attribute="program_path", return_value=self.program),
             mock.patch.object(target=sys, attribute="platform", new="linux"),
         ):

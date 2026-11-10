@@ -175,9 +175,9 @@ class CatalogTab(Filters, Header, Folders):
         self.auto_upload_box.setChecked(self.vault.auto_upload)
         self.auto_upload_box.toggled.connect(self.auto_upload_changed)
         mod_row.addWidget(self.auto_upload_box)
-        self.gh_note = label(text="Sign in to gh to use this", role="muted")
-        self.gh_note.hide()
-        mod_row.addWidget(self.gh_note)
+        self.github_note = label(text="Add a GitHub token in Settings to use this", role="muted")
+        self.github_note.hide()
+        mod_row.addWidget(self.github_note)
         # The same repository popup as the GitHub tab, which lists owners too.
         self.auto_repo_button = button(text="", action=self.choose_auto_repo, role="field")
         show_repo(widget=self.auto_repo_button, repo=self.vault.auto_repo, repos=[])

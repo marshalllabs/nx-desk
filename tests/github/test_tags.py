@@ -1,5 +1,4 @@
 import unittest
-from typing import List, Tuple
 from unittest import mock
 
 from nx_desk import uploader
@@ -8,7 +7,7 @@ from tests.helpers import FakeGitHub
 
 class DeleteTagTests(unittest.TestCase):
     def delete(self, hub: FakeGitHub, tag: str = "old") -> bool:
-        with mock.patch.object(target=uploader.command, attribute="gh", new=hub):
+        with mock.patch.object(target=uploader.api, attribute="request", new=hub.request):
             return uploader.releases.delete_tag(repo="me/mods", tag=tag)
 
     def test_a_tag_is_removed(self) -> None:
@@ -30,14 +29,7 @@ class DeleteTagTests(unittest.TestCase):
         self.assertEqual(first=hub.tags, second={"old"})
 
     def test_the_tag_name_goes_into_the_path_safely(self) -> None:
-        seen: List[Tuple[str, ...]] = []
-
-        def gh(*args: str) -> str:
-            seen.append(args)
-
-            return ""
-
-        with mock.patch.object(target=uploader.command, attribute="gh", new=gh):
+        with mock.patch.object(target=uploader.api, attribute="request") as request:
             uploader.releases.delete_tag(repo="me/mods", tag="a b/c")
 
-        self.assertEqual(first=seen, second=[("api", "-X", "DELETE", "repos/me/mods/git/refs/tags/a%20b%2Fc")])
+        request.assert_called_once_with(path="repos/me/mods/git/refs/tags/a%20b%2Fc", method="DELETE")

@@ -3,7 +3,10 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Set, Tuple
+from typing import Dict, Optional, Set
+from urllib.parse import unquote
+
+from pydantic import BaseModel, JsonValue
 
 from nx_desk import uploader
 from nx_desk.catalog.parse import normalize
@@ -12,6 +15,7 @@ from nx_desk.schemas.common import Progress
 from nx_desk.schemas.download import Job
 from nx_desk.schemas.github import Asset
 from nx_desk.schemas.snapshot import ModRow
+from nx_desk.utils.json import parse_json
 
 sys.dont_write_bytecode = True
 
@@ -77,98 +81,111 @@ class FakeGitHub:
         self.next_id = 1
         self.logged_in = True
 
-    def __call__(self, *args: str) -> str:
-        if args[:2] == ("auth", "status"):
+    def request(self, path: str, method: str = "GET", data: Optional[BaseModel] = None) -> JsonValue:
+        if path == "user":
             if not self.logged_in:
-                raise uploader.command.GhError("not logged in")
+                raise uploader.command.GitHubError("HTTP 401: Replace the token in Settings > GitHub.", status=401)
 
-            return ""
+            return {"login": "synthetic"}
 
-        if args[:2] == ("auth", "token"):
-            return "token\n"
+        if path.startswith("user/repos"):
+            return parse_json(
+                text=json.dumps(
+                    obj=[
+                        {
+                            "full_name": name,
+                            "name": name.split(sep="/")[1],
+                            "owner": {"login": name.split(sep="/")[0]},
+                            "visibility": "public",
+                        }
+                        for name in self.repos
+                    ],
+                ),
+            )
 
-        if args[-1].startswith("user/repos"):
-            rows = [
-                {
-                    "full_name": name,
-                    "name": name.split(sep="/")[1],
-                    "owner": {"login": name.split(sep="/")[0]},
-                    "visibility": "public",
-                }
-                for name in self.repos
-            ]
+        if "/git/refs/tags/" in path:
+            self.delete_tag(tag=unquote(string=path.split(sep="/git/refs/tags/")[1]))
 
-            return json.dumps(obj=[rows])
+            return None
 
-        if args[-1].endswith("/releases/latest"):
+        if path.endswith("/releases/latest"):
             if not self.latest:
-                raise uploader.command.GhError("HTTP 404")
+                raise uploader.command.GitHubError("HTTP 404", status=404)
 
-            return json.dumps(obj={"tag_name": self.latest})
+            return {"tag_name": self.latest}
 
-        if args[:2] == ("release", "create"):
-            self.releases.append(args[2])
-            self.tags.add(args[2])
+        if "/releases/tags/" in path:
+            tag = unquote(string=path.split(sep="/releases/tags/")[1])
 
-            return ""
+            return {"id": self.releases.index(tag) + 1 if tag in self.releases else 1, "tag_name": tag}
 
-        if args[:2] == ("release", "edit"):
-            new = args[args.index("--tag") + 1]
-            self.releases = [new if tag == args[2] else tag for tag in self.releases]
-            self.tags.add(new)
+        if "/releases/assets/" in path:
+            number = int(path.rsplit("/", 1)[1])
+            item = next(asset for asset in self.assets.values() if asset.id == number)
+            del self.assets[item.name]
 
-            if self.latest == args[2]:
-                self.latest = new
+            if method == "PATCH":
+                assert data is not None
+                old = item.name
+                item = item.model_copy(update=data.model_dump(exclude_none=True))
+                self.assets[item.name] = item
+                self.blobs[item.name] = self.blobs.pop(old, b"")
 
-            return ""
+            return None
 
-        if args[:2] == ("release", "delete"):
-            self.releases = [tag for tag in self.releases if tag != args[2]]
-            self.assets = {}
+        if path.endswith("/releases"):
+            if method == "POST":
+                assert data is not None
+                tag = str(data.model_dump()["tag_name"])
+                self.releases.append(tag)
+                self.tags.add(tag)
 
-            if "--cleanup-tag" in args:
-                self.tags.discard(args[2])
+                return {"id": len(self.releases), "tag_name": tag}
 
-            if self.latest == args[2]:
-                self.latest = self.releases[0] if self.releases else ""
+            return [{"tag_name": tag} for tag in self.releases]
 
-            return ""
+        if path.endswith("/assets"):
+            return parse_json(text=json.dumps(obj=[asset.model_dump(mode="json") for asset in self.assets.values()]))
 
-        if args[:2] == ("release", "upload"):
-            path = Path(args[3])
-            self.add(name=path.name, digest=f"sha256:{hashlib.sha256(string=path.read_bytes()).hexdigest()}")
-            self.assets[path.name].size = path.stat().st_size
-            self.assets[path.name].updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 1))
-            self.blobs[path.name] = path.read_bytes()
+        if "/releases/" in path:
+            number = int(path.rsplit("/", 1)[1])
+            old = self.releases[number - 1]
 
-            return ""
+            if method == "PATCH":
+                assert data is not None
+                new = str(data.model_dump()["tag_name"])
+                self.releases[number - 1] = new
+                self.tags.add(new)
 
-        if args[:2] == ("release", "download"):
-            name = args[args.index("--pattern") + 1]
-            (Path(args[args.index("--dir") + 1]) / name).write_bytes(data=self.blobs[name])
+                if self.latest == old:
+                    self.latest = new
 
-            return ""
+            elif method == "DELETE":
+                self.releases.remove(old)
+                self.assets = {}
 
-        if "-X" in args and "/git/refs/tags/" in args[-1]:
-            return self.delete_tag(tag=args[-1].rsplit("/", 1)[1])
+                if self.latest == old:
+                    self.latest = self.releases[0] if self.releases else ""
 
-        if "-X" in args:
-            return self.change(args=args)
+            return None
 
-        url = args[-1]
+        raise AssertionError(f"Unexpected API request: {method} {path}")
 
-        if url.endswith("/releases?per_page=100"):
-            return json.dumps(obj=[[{"tag_name": tag} for tag in self.releases]])
+    def pages(self, path: str) -> JsonValue:
+        return self.request(path=path)
 
-        if "/releases/tags/" in url:
-            return json.dumps(obj={"id": 1})
-
-        return json.dumps(obj=[[asset.model_dump(mode="json") for asset in self.assets.values()]])
+    def download(self, repo: str, asset_id: int, target: Path, moved: Progress = lambda done: None) -> None:
+        item = next(asset for asset in self.assets.values() if asset.id == asset_id)
+        target.write_bytes(data=self.blobs[item.name])
+        moved(target.stat().st_size)
 
     def post(self, repo: str, release: int, path: Path, token: str, moved: Progress) -> None:
         assert token == "token"
         moved(path.stat().st_size)
-        self("release", "upload", "tag", str(path))
+        self.add(name=path.name, digest=f"sha256:{hashlib.sha256(string=path.read_bytes()).hexdigest()}")
+        self.assets[path.name].size = path.stat().st_size
+        self.assets[path.name].updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 1))
+        self.blobs[path.name] = path.read_bytes()
 
     def add(self, name: str, digest: str) -> None:
         self.assets[name] = Asset(id=self.next_id, name=name, digest=digest)
@@ -176,27 +193,11 @@ class FakeGitHub:
 
     def delete_tag(self, tag: str) -> str:
         if self.keep_tags:
-            raise uploader.command.GhError("HTTP 403: Resource not accessible")
+            raise uploader.command.GitHubError("HTTP 403: Resource not accessible", status=403)
 
         if tag not in self.tags:
-            raise uploader.command.GhError("HTTP 422: Reference does not exist")
+            raise uploader.command.GitHubError("HTTP 422: Reference does not exist", status=422)
 
         self.tags.discard(tag)
-
-        return ""
-
-    def change(self, args: Tuple[str, ...]) -> str:
-        number = int(args[3].rsplit("/", 1)[1])
-        asset = next(item for item in self.assets.values() if item.id == number)
-        del self.assets[asset.name]
-
-        if args[2] == "PATCH":
-            old = asset.name
-            fields = dict(
-                args[index + 1].split(sep="=", maxsplit=1) for index, arg in enumerate(iterable=args) if arg == "-f"
-            )
-            asset = asset.model_copy(update=fields)
-            self.assets[asset.name] = asset
-            self.blobs[asset.name] = self.blobs.pop(old, b"")
 
         return ""

@@ -11,13 +11,13 @@ from ..schemas.release_state import ReleaseDocument, ReleaseRecord
 from ..schemas.state import DOWNLOAD_RECORDS, RELEASE_STATE, ReleaseState
 from ..utils.dates import parse_time
 from ..utils.release_state import assets_present, build_record, content_matches, find_record, refresh_metadata
-from .logs import Logs
+from .github_auth import GitHubAuth
 
 # Changes the mods of state.json, given the release files as they are now.
 StateChange = Callable[[Dict[str, ReleaseRecord], Dict[str, Asset]], None]
 
 
-class ReleaseStates(Logs):
+class ReleaseStates(GitHubAuth):
     def linked_catalog(self, tag: str) -> Optional[Catalog]:
         return next((catalog for catalog in self.catalogs if catalog.folder == tag), None)
 
@@ -107,10 +107,12 @@ class ReleaseStates(Logs):
             return None
 
         try:
+            self._bind_github()
+
             try:
                 assets = uploader.releases.remote_assets(repo=repo, tag=tag)
 
-            except uploader.command.GhError:
+            except uploader.command.GitHubError:
                 if tag in uploader.releases.list_releases(repo=repo):
                     raise
 
@@ -121,7 +123,7 @@ class ReleaseStates(Logs):
 
             return data
 
-        except (uploader.command.GhError, OSError) as error:
+        except (uploader.command.GitHubError, OSError) as error:
             self._note_release_error(text=str(error) or type(error).__name__)
 
             return None

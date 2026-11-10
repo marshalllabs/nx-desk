@@ -100,7 +100,7 @@ class CatalogTabState(QWidget):
     open_button: QPushButton
     mod_entry: QLineEdit
     auto_upload_box: QCheckBox
-    gh_note: QLabel
+    github_note: QLabel
     auto_repo_button: QPushButton
     auto_delete_box: QCheckBox
     get_button: QToolButton

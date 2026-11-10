@@ -1,5 +1,7 @@
 from typing import List, Optional
 
+from pydantic import BaseModel, JsonValue
+
 from nx_desk import uploader, vault
 from nx_desk.schemas.catalog import CatalogEdit
 from nx_desk.schemas.state import ReleaseState
@@ -107,14 +109,14 @@ class RenameTests(CatalogCase):
         edits: List[str] = []
 
         class Failing(FakeGitHub):
-            def __call__(self, *args: str) -> str:
-                if args[:2] == ("release", "edit"):
-                    edits.append(args[2])
+            def request(self, path: str, method: str = "GET", data: Optional[BaseModel] = None) -> JsonValue:
+                if method == "PATCH" and "/releases/" in path:
+                    edits.append(self.releases[int(path.rsplit("/", 1)[1]) - 1])
 
                     if len(edits) == 2:
-                        raise uploader.command.GhError("HTTP 500")
+                        raise uploader.command.GitHubError("HTTP 500", status=500)
 
-                return super().__call__(*args)
+                return super().request(path=path, method=method, data=data)
 
         failing = Failing()
         failing.releases = ["a", "other"]
@@ -141,7 +143,7 @@ class RenameTests(CatalogCase):
         self.github.logged_in = False
         result = self.rename()
         self.assertEqual(first=(result.catalog.folder, result.catalog.name), second=("a", "Brand New"))
-        self.assertIn(member="gh is not available", container=result.notes[0])
+        self.assertIn(member="GitHub authentication is unavailable", container=result.notes[0])
         self.assertEqual(first=self.github.releases, second=["a", "other"])
 
     def test_a_name_with_the_same_slug_moves_nothing_and_asks_nothing_of_gh(self) -> None:

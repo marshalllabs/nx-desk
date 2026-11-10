@@ -1,4 +1,5 @@
 import hashlib
+import http.client
 import os
 import subprocess
 import sys
@@ -62,6 +63,13 @@ def isolated_runtime() -> Iterator[None]:
                 target=subprocess,
                 attribute="Popen",
                 side_effect=AssertionError("Processes must be mocked"),
+            ),
+        )
+        stack.enter_context(
+            mock.patch.object(
+                target=http.client,
+                attribute="HTTPSConnection",
+                side_effect=AssertionError("HTTPS must be mocked"),
             ),
         )
         yield

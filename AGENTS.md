@@ -38,7 +38,7 @@
 | `credentials.py`, `steamgriddb.py` | Secret storage and artwork service access |
 | `names.py`, `zips.py` | Names, saved paths and archive repackaging |
 | `catalog/` | Untrusted catalog parsing and reference-list readers |
-| `uploader/` | GitHub commands, releases, transfers, parts and release state |
+| `uploader/` | GitHub REST requests, releases, transfers, parts and release state |
 | `vault/` | Application state and jobs, split into mixins |
 | `cli.py` | Startup and background check loop |
 | `ui/` | PySide6 app, tabs and shared widgets |
@@ -59,7 +59,7 @@
   Avoid circular imports; helpers used by only one module stay with that module.
 - Import names from their defining modules; use `TYPE_CHECKING` for type-only cycles.
 - Keep `__init__.py` empty except for the existing `vault` mixin assembly and `uploader` module imports.
-- Call patchable dependencies through their modules: `net.http_get`, `settings.load_config`, `uploader.command.gh`.
+- Call patchable dependencies through their modules: `net.http_get`, `settings.load_config`, `uploader.api.request`.
 - Keep Qt imports inside the UI boundary; `cli.main` imports the UI lazily.
   - CLI checks and tests must work without Qt; CI lacks the libraries needed to load PySide6.
 - `vault/base.py` owns shared attributes; mixins inherit the dependencies they call.
@@ -92,7 +92,10 @@
 - Delete a local copy only after its upload and release-state write succeed.
 - Local deletion must stay below the source folder, never delete that folder or its ancestors.
 - Preserve typed confirmations for destructive operations and rollback on failed linked catalog/release renames.
-- GitHub operations use the existing `gh` login; direct upload tokens stay in memory and go only to `UPLOAD_HOST`.
+- GitHub operations use REST with a PAT stored only in the system keyring; registry stores presence only.
+  - API requests send tokens only to the API host; uploads send them only to `UPLOAD_HOST`.
+  - Asset redirects never forward tokens to storage hosts; never import credentials from `gh`.
+  - Repository visibility and public read access do not prove token write permissions.
 - Preserve split/join support for files over 2 GB and restrict automatic retries to safe operations.
 
 ## Data and credentials
@@ -112,7 +115,7 @@
 - `NX_DESK_USER_AGENT` is runtime-only; `NX_DESK_RELEASES_URL` is required for builds.
 - Source runs are unversioned; verify self-update with a packaged build.
 - Check GitHub self-updates through the public Releases API and download assets over HTTPS; this does not require `gh`.
-- Keep `gh` authentication for private release operations in the GitHub tab and uploader.
+- Settings manages GitHub PATs; changing/removing a token must wait for active GitHub operations.
 - Build naming and update selection share `asset_name()`; renaming assets can strand installed builds.
 - Homebrews reads the normalized NX Index feed through optional `NX_DESK_HOMEBREWS_URL`; keep
   source HTML parsing in NX Index. Preserve cached rows on errors and independent List/Grid settings.

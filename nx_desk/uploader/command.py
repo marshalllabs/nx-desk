@@ -1,34 +1,45 @@
+import http.client
 import re
-import shutil
-import subprocess
+import socket
 import threading
 import time
 from contextlib import contextmanager
-from typing import Iterator, Optional, Tuple
+from typing import Callable, Iterator, Optional
 
-from ..system import system_env
+from .. import net
 from ..zips import Cancelled
 
-# GitHub limits how fast content is created and asks callers to wait; seconds between tries.
 RATE_WAITS = (60, 120, 240)
 RATE_LIMITED = re.compile(pattern=r"rate limit|HTTP 429", flags=re.IGNORECASE)
-# GitHub sometimes fails a request on its side for a moment; seconds between tries.
 SERVER_WAITS = (5, 15, 45)
-SERVER_ERROR = re.compile(pattern=r"HTTP 50[0234]\b")
-# API calls that give the same result when sent twice. Creating things is left out.
 REPEATABLE = ("GET", "PATCH", "DELETE")
 
 
-class GhError(Exception):
+class GitHubError(Exception):
+    def __init__(self, message: str, status: int = 0) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class NetworkError(GitHubError):
     pass
 
 
-class NetworkError(GhError):
-    pass
-
-
-# The cancel event of the job this thread runs, which lets Stop end a long gh call.
 running = threading.local()
+
+
+def authenticate(provider: Callable[[], str]) -> None:
+    running.provider = provider
+
+
+def token() -> str:
+    provider: Callable[[], str] = getattr(running, "provider", lambda: "")
+    value = provider()
+
+    if not value:
+        raise GitHubError("Add a GitHub personal access token in Settings > GitHub.")
+
+    return value
 
 
 @contextmanager
@@ -50,42 +61,42 @@ def stop_point() -> None:
         raise Cancelled
 
 
-def gh(*args: str) -> str:
-    command = shutil.which(cmd="gh")
+@contextmanager
+def interruptible(
+    connection: http.client.HTTPSConnection,
+    reply: Optional[http.client.HTTPResponse] = None,
+) -> Iterator[None]:
+    cancel = getattr(running, "cancel", None)
+    finished = threading.Event()
 
-    if not command:
-        raise GhError("GitHub CLI (gh) is not installed. Install gh and try again.")
+    def watch() -> None:
+        while not finished.wait(timeout=0.1):
+            if cancel is not None and cancel.is_set():
+                sock = connection.sock
 
-    rate, server = iter(RATE_WAITS), iter(SERVER_WAITS)
+                if isinstance(sock, socket.socket):
+                    try:
+                        sock.shutdown(socket.SHUT_RDWR)
 
-    while True:
-        try:
-            return run_gh(command=command, args=args)
+                    except OSError:
+                        pass
 
-        except GhError as error:
-            # A request refused for its rate was not carried out, so sending it again is safe.
-            if RATE_LIMITED.search(string=str(error)):
-                wait = next(rate, None)
+                    return
 
-            elif SERVER_ERROR.search(string=str(error)) and repeatable(args=args):
-                wait = next(server, None)
+                if reply is not None:
+                    net.abort(response=reply)
 
-            else:
-                wait = None
+                    return
 
-            if wait is None:
-                raise
+    if cancel is not None:
+        threading.Thread(target=watch, daemon=True).start()
 
-            pause(seconds=wait)
+    try:
+        stop_point()
+        yield
 
-
-def repeatable(args: Tuple[str, ...]) -> bool:
-    if not args or args[0] != "api":
-        return False
-
-    method = args[args.index("-X") + 1] if "-X" in args[:-1] else "GET"
-
-    return method.upper() in REPEATABLE
+    finally:
+        finished.set()
 
 
 def pause(seconds: float) -> None:
@@ -96,46 +107,3 @@ def pause(seconds: float) -> None:
 
     elif cancel.wait(seconds):
         raise Cancelled
-
-
-def run_gh(command: str, args: Tuple[str, ...]) -> str:
-    process = subprocess.Popen(
-        args=[command, *args],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env=system_env(),
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-
-    while True:
-        try:
-            output, errors = process.communicate(timeout=0.2)
-            break
-
-        except subprocess.TimeoutExpired:
-            try:
-                stop_point()
-
-            except Cancelled:
-                process.kill()
-                process.communicate()
-                raise
-
-    if process.returncode:
-        raise GhError(errors.strip() or f"gh failed with code {process.returncode}")
-
-    return output
-
-
-def ensure_login() -> None:
-    try:
-        gh("auth", "status")
-
-    except GhError as error:
-        if "not installed" in str(error):
-            raise
-
-        raise GhError("You are not signed in to gh. Run `gh auth login` in a terminal and try again.") from error

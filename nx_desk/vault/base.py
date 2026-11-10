@@ -120,8 +120,8 @@ class VaultBase:
         self.homebrew_rows: List[Homebrew] = parse_homebrews(
             data=self._load_json(path=self.cache_dir / HOMEBREWS_FILE, default={}),
         )
-        # None until gh has answered once.
-        self.gh_ready: Optional[bool] = None
+        # None until GitHub authentication has been checked.
+        self.github_ready: Optional[bool] = None
         registry = self._load_model(path=self.registry_path, schema=REGISTRY, default=Registry())
         self.title_rows: List[TitleRow] = parse_title_ids(
             data=self._load_json(path=self.cache_dir / TITLE_IDS_FILE, default={}),
@@ -135,6 +135,8 @@ class VaultBase:
         self.upload_source = registry.upload_source
         self.upload_repo = registry.upload_repo
         self.upload_tag = registry.upload_tag
+        self.github_token_saved = registry.github_token_saved
+        self.github_secret: Optional[str] = None
         self.auto_upload = registry.auto_upload
         self.auto_delete = self.auto_upload and registry.auto_delete
         self.upload_delete = registry.upload_delete
@@ -288,6 +290,7 @@ class VaultBase:
             font_size=self.font_size,
             compression=self.compression,
             art_key=self.art_key,
+            github_token_saved=self.github_token_saved,
         )
         self._write_json(path=self.registry_path, value=registry)
 
@@ -301,11 +304,11 @@ class VaultBase:
     def _release_cache(self, folder: str) -> Path:
         return self._catalog_file(folder=folder, name=RELEASE_FILE)
 
-    # gh gone or signed out leaves saved mods on disk, without a failed upload for each one.
+    # A missing or refused GitHub token leaves saved mods on disk, without a failed upload for each one.
     def _will_auto_upload(self) -> bool:
         return (
             self.auto_upload
-            and self.gh_ready is not False
+            and self.github_ready is not False
             and bool(uploader.releases.REPO_NAME.match(string=self.auto_repo))
         )
 

@@ -47,5 +47,9 @@ class CatalogCase(unittest.TestCase):
         fake = github or FakeGitHub()
         fake.logged_in = fake.logged_in if github else False
 
-        with self.served(games=games), mock.patch.object(target=uploader.command, attribute="gh", new=fake):
+        with (
+            self.served(games=games),
+            mock.patch.object(target=uploader.api, attribute="request", new=fake.request),
+            mock.patch.object(target=uploader.api, attribute="pages", new=fake.pages),
+        ):
             return self.store.edit_catalog(folder=folder, name=name, url=url, mapping=mapping)

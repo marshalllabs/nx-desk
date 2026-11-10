@@ -1,4 +1,3 @@
-import json
 from unittest import mock
 
 from nx_desk import uploader, vault
@@ -54,27 +53,27 @@ class ReleaseTests(GitHubCase):
         self.assertEqual(first=self.store.upload_job.releases, second=[])
 
     def test_new_release_is_not_marked_latest(self) -> None:
-        with mock.patch.object(target=uploader.command, attribute="gh", return_value="") as call:
+        with mock.patch.object(target=uploader.api, attribute="request", return_value=None) as call:
             uploader.releases.create_release(repo="me/mods", tag="new")
 
-        self.assertIn(member="--latest=false", container=call.call_args[0])
+        self.assertEqual(first=call.call_args.kwargs["data"].make_latest, second="false")
 
     def test_not_logged_in_raises_an_alert(self) -> None:
         self.hub.logged_in = False
         self.store.load_releases()
         job = self.store.upload_job
         self.assertEqual(first=job.alerts, second=1)
-        self.assertIn(member="gh auth login", container=job.message)
+        self.assertIn(member="Settings > GitHub", container=job.message)
 
-    def test_missing_gh_is_reported(self) -> None:
+    def test_refused_token_is_reported(self) -> None:
         with mock.patch.object(
-            target=uploader.command,
-            attribute="gh",
-            side_effect=uploader.command.GhError("GitHub CLI (gh) is not installed."),
+            target=uploader.api,
+            attribute="request",
+            side_effect=uploader.command.GitHubError("HTTP 401: Token is invalid or expired."),
         ):
             self.store.load_releases()
 
-        self.assertIn(member="not installed", container=self.store.upload_job.message)
+        self.assertIn(member="invalid or expired", container=self.store.upload_job.message)
 
     def test_renames_the_current_release(self) -> None:
         self.store.set_upload_settings(source=str(self.src), repo="me/mods", tag="reviewed")
@@ -149,9 +148,9 @@ class RepoListTests(GitHubCase):
         self.assertEqual(first=(self.store.upload_repo, self.store.upload_tag), second=("me/mods", "reviewed"))
 
     def test_rows_that_are_not_repositories_are_dropped(self) -> None:
-        rows = [[{"full_name": "me/ok", "owner": "not a dict"}, {"full_name": "no slash"}, {"name": "x"}, "junk"]]
+        rows = [{"full_name": "me/ok", "owner": "not a dict"}, {"full_name": "no slash"}, {"name": "x"}, "junk"]
 
-        with mock.patch.object(target=uploader.command, attribute="gh", return_value=json.dumps(obj=rows)):
+        with mock.patch.object(target=uploader.api, attribute="pages", return_value=rows):
             repos = uploader.releases.list_repos()
 
         self.assertEqual(first=[(repo.full_name, repo.owner) for repo in repos], second=[("me/ok", "")])

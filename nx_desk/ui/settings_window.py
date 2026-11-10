@@ -11,14 +11,17 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..config import COMPRESSION_LEVELS
 from ..schemas.presentation import Preferences
 from ..utils.sizes import SIZE_UNITS
 from .layout_models import FormGroup
+from .settings_github import GitHubSettings
 from .style import DEFAULT_FONT_SIZE, FONT_SIZES, default_family
 from .theme import SPACE
 from .widgets.basics import button, label
@@ -47,10 +50,23 @@ class SettingsWindow(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 14, 18, 14)
         layout.setSpacing(12)
-        layout.addWidget(self.build_appearance())
-        layout.addWidget(self.build_downloads())
-        layout.addWidget(self.build_art())
-        layout.addWidget(self.build_other())
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        body = QWidget()
+        groups = QVBoxLayout(body)
+        groups.setContentsMargins(0, 0, 0, 0)
+        groups.setSpacing(SPACE["md"])
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        groups.addWidget(self.build_appearance())
+        groups.addWidget(self.build_downloads())
+        groups.addWidget(self.build_art())
+        self.github = GitHubSettings(vault=self.vault, changed=self.paint_pending)
+        self.forms.append(self.github.form)
+        groups.addWidget(self.github)
+        groups.addWidget(self.build_other())
+        groups.addStretch(1)
         foot = QHBoxLayout()
         foot.addStretch(1)
         foot.addWidget(button(text="Cancel", action=self.reject))
@@ -60,6 +76,7 @@ class SettingsWindow(QDialog):
         save.setDefault(True)
         foot.addWidget(save)
         layout.addLayout(foot)
+        self.resize(660, min(760, int(self.screen().availableGeometry().height() * 0.85)))
         self.align_labels()
         self.paint_pending()
 
@@ -230,10 +247,18 @@ class SettingsWindow(QDialog):
         )
 
     def paint_pending(self) -> None:
-        self.apply_button.setEnabled(self.chosen() != self.saved())
+        self.apply_button.setEnabled(self.chosen() != self.saved() or self.github.pending())
 
     # Only what changed is applied, so an unchanged font does not restyle the whole window.
-    def apply(self) -> None:
+    def apply(self) -> bool:
+        github_changed = self.github.pending()
+
+        if not self.github.apply():
+            return False
+
+        if github_changed:
+            self.app.uploads.run(action=self.vault.reload_github)
+
         preferences = self.chosen()
         family = preferences.font_family
         size = preferences.font_size
@@ -265,9 +290,11 @@ class SettingsWindow(QDialog):
 
         self.paint_pending()
 
+        return True
+
     def save(self) -> None:
-        self.apply()
-        self.accept()
+        if self.apply():
+            self.accept()
 
     def default_font(self) -> None:
         self.family_box.setCurrentFont(QFont(default_family()))

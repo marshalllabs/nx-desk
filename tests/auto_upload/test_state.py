@@ -63,7 +63,7 @@ class StateTests(AutoUploadCase):
         self.hub.blobs["state.json"] = data
         self.hub.assets["state.json"].digest = f"sha256:{hashlib.sha256(string=data).hexdigest()}"
 
-        with self.store.github_lock, self.assertRaises(expected_exception=uploader.command.GhError):
+        with self.store.github_lock, self.assertRaises(expected_exception=uploader.command.GitHubError):
             self.store._write_release_state(repo="me/mods", tag="my-catalog", change=lambda mods, assets: None)
 
         self.assertEqual(first=self.hub.blobs["state.json"], second=data)
@@ -102,7 +102,7 @@ class StateTests(AutoUploadCase):
         with mock.patch.object(
             target=uploader.state,
             attribute="replace_asset",
-            side_effect=uploader.command.GhError("boom"),
+            side_effect=uploader.command.GitHubError("boom"),
         ):
             self.download(item=self.item())
 
@@ -174,7 +174,7 @@ class StateTests(AutoUploadCase):
             zipped: Progress = quiet,
         ) -> None:
             if folder.name.startswith("Two"):
-                raise uploader.command.GhError("connection lost")
+                raise uploader.command.GitHubError("connection lost")
 
             return real(
                 self=store,

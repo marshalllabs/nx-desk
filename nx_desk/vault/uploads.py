@@ -94,7 +94,7 @@ class Uploads(Releases):
 
             uploader.releases.delete_leftovers(repo=repo, tag=tag)
 
-        except (uploader.command.GhError, ValueError, OSError) as error:
+        except (uploader.command.GitHubError, ValueError, OSError) as error:
             with self.lock:
                 alerts = self.upload_job.alerts + 1
 
@@ -184,7 +184,7 @@ class Uploads(Releases):
                         self._record_in_state(repo=repo, tag=tag, folder_names=[folder.name])
                         recorded = True
 
-                    except (uploader.command.GhError, OSError) as error:
+                    except (uploader.command.GitHubError, OSError) as error:
                         recorded = False
                         text = f"could not update {uploader.state.STATE_ASSET}, the next upload will: {error}"
                         self._log_folder(folder_name=folder.name, text=text, level="error")
@@ -199,7 +199,7 @@ class Uploads(Releases):
                         if self._delete_local(folder=folder):
                             results["deleted"] += 1
 
-                except (uploader.command.GhError, OSError, zipfile.BadZipFile) as error:
+                except (uploader.command.GitHubError, OSError, zipfile.BadZipFile) as error:
                     outcome = "error"
                     text = str(error) or type(error).__name__
                     self._mark_folder(name=folder.name, status="error", message=text)
@@ -241,7 +241,7 @@ class Uploads(Releases):
         try:
             self._refresh_assets(repo=repo, tag=tag)
 
-        except uploader.command.GhError as error:
+        except uploader.command.GitHubError as error:
             message += f" Could not reload the release: {error}"
 
         if results["deleted"]:

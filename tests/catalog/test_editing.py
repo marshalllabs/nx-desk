@@ -17,9 +17,9 @@ class EditTests(CatalogCase):
         self.store._commit(entry=item, target=target)
         result = self.edit(folder="a", url="https://new.test/c.json", games=("one", "two"), name="Renamed")
         self.assertIs(expr1=result.catalog, expr2=first)
-        # Without gh the folder, and with it the release, keep their names.
+        # Without GitHub authentication the folder, and with it the release, keep their names.
         self.assertEqual(first=(result.catalog.folder, result.catalog.name, result.count), second=("a", "Renamed", 2))
-        self.assertTrue(expr=result.notes and "gh is not available" in result.notes[0])
+        self.assertTrue(expr=result.notes and "GitHub authentication is unavailable" in result.notes[0])
         self.assertEqual(first=len(self.store.items), second=2)
         self.assertEqual(first=self.store.status_of(entry=self.store.items[0]), second="ok")
         reopened = vault.Vault(base=self.dir)

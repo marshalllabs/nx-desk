@@ -37,6 +37,8 @@ class Registry(BaseModel):
     catalog_view: str = "list"
     # Where the SteamGridDB API key is kept; the key itself is never written here.
     art_key: StoredSecret = StoredSecret()
+    # Only presence is recorded; the GitHub PAT stays in the system keyring.
+    github_token_saved: bool = False
 
 
 REGISTRY: TypeAdapter[Registry] = TypeAdapter(type=Registry)

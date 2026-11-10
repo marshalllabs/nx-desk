@@ -1,9 +1,8 @@
 import re
-import threading
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..schemas.common import Progress, Report
+from ..schemas.common import Report
 from . import command
 
 # A big transfer can lose its connection; seconds between tries.
@@ -23,7 +22,7 @@ def transfer[T](action: Callable[[], T], report: Report, name: str, partial: Opt
         try:
             return action()
 
-        except command.GhError as error:
+        except command.GitHubError as error:
             limited = command.RATE_LIMITED.search(string=str(error))
             lost = isinstance(error, command.NetworkError) or NETWORK_TROUBLE.search(string=str(error))
             wait = next(rate if limited else network, None) if limited or lost else None
@@ -37,20 +36,3 @@ def transfer[T](action: Callable[[], T], report: Report, name: str, partial: Opt
 
             if partial is not None:
                 partial.unlink(missing_ok=True)
-
-
-# The file grows in the target folder while gh fetches it, which is the only sign of progress.
-def watch_file(path: Path, moved: Progress) -> threading.Event:
-    finished = threading.Event()
-
-    def watch() -> None:
-        while not finished.wait(timeout=0.5):
-            try:
-                moved(path.stat().st_size)
-
-            except OSError:
-                pass
-
-    threading.Thread(target=watch, daemon=True).start()
-
-    return finished

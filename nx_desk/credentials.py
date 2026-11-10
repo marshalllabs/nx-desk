@@ -4,6 +4,7 @@ import secrets
 from pathlib import Path
 
 import keyring
+from keyring.errors import PasswordDeleteError
 
 from .schemas.artwork import StoredSecret
 from .utils.seal import seal, unseal
@@ -63,12 +64,17 @@ def keyring_get(user: str) -> str:
         return ""
 
 
-def keyring_delete(user: str) -> None:
+def keyring_delete(user: str) -> bool:
     try:
         keyring.delete_password(service_name=SERVICE, username=user)
 
+    except PasswordDeleteError:
+        return True
+
     except Exception:
-        pass
+        return False
+
+    return True
 
 
 # An empty value forgets the secret. The keyring comes first; without one the value is sealed.

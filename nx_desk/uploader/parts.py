@@ -9,7 +9,7 @@ from ..schemas.github import Asset, UploadPart
 from ..utils.callbacks import offset, quiet
 from ..utils.files import sha256_of
 from ..utils.sizes import format_size
-from . import archive, command, progress, releases, upload
+from . import archive, command, download, progress, releases, upload
 
 PART_SUFFIX = re.compile(pattern=r"\.\d{3}$")
 
@@ -56,26 +56,25 @@ def download_group(
     for index, name in enumerate(iterable=names, start=1):
         size = assets[name].size or 0
         report(f"downloading {name} ({format_size(value=size)}, {index}/{len(names)})")
-        arguments = ("release", "download", tag, "--repo", repo, "--pattern", name, "--dir", str(place))
-        finished = progress.watch_file(path=place / name, moved=offset(moved=moved, before=before))
-
-        try:
-            progress.transfer(
-                action=functools.partial(command.gh, *arguments),
-                report=report,
-                name=name,
-                partial=place / name,
-            )
-
-        finally:
-            finished.set()
+        progress.transfer(
+            action=functools.partial(
+                download.asset,
+                repo=repo,
+                asset_id=assets[name].id,
+                target=place / name,
+                moved=offset(moved=moved, before=before),
+            ),
+            report=report,
+            name=name,
+            partial=place / name,
+        )
 
         before += size
         moved(before)
         digest = assets[name].digest
 
         if digest and digest != f"sha256:{sha256_of(path=place / name)}":
-            raise command.GhError(f"{name}: downloaded file does not match SHA-256")
+            raise command.GitHubError(f"{name}: downloaded file does not match SHA-256")
 
         report(f"{name}: SHA-256 matches GitHub" if digest else f"{name}: GitHub gave no SHA-256 to check")
 
@@ -133,7 +132,7 @@ def upload_parts(
         name, temp = upload_part.name, upload_part.path
 
         if fresh[temp.name].digest != f"sha256:{sha256_of(path=temp)}":
-            raise command.GhError(f"{name}: file on GitHub does not match, the old copy is kept")
+            raise command.GitHubError(f"{name}: file on GitHub does not match, the old copy is kept")
 
     command.stop_point()
     old = owned_assets(stem=stem, assets=assets)
@@ -148,7 +147,6 @@ def upload_parts(
 
         for upload_part in uploads:
             name, temp = upload_part.name, upload_part.path
-            fields = ["-f", f"name={name}"] + (["-f", f"label={label}"] if label else [])
-            command.gh("api", "-X", "PATCH", f"repos/{repo}/releases/assets/{fresh[temp.name].id}", *fields)
+            releases.rename_asset(repo=repo, asset=fresh[temp.name], name=name, label=label)
 
     report(f"named {', '.join(part.name for part in uploads)} on GitHub" + (f", labelled {label}" if label else ""))

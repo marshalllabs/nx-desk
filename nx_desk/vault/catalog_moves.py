@@ -38,7 +38,7 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
         return list(dict.fromkeys(repo for repo in repos if uploader.releases.REPO_NAME.match(string=repo)))
 
     # Gives the catalog the folder `new`, with its release, files and downloads. Returns what to tell the user.
-    # Nothing changes when it cannot be done in full: a release is only renamed when gh can do it everywhere it
+    # Nothing changes when it cannot be done in full: a release is only renamed when GitHub allows it everywhere it
     # lives, and the folder only follows when that worked, so the catalog and its release stay linked.
     def _rename_folder(self, catalog: Catalog, new: str) -> List[str]:
         old = catalog.folder
@@ -55,8 +55,8 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
         try:
             self._login()
 
-        except uploader.command.GhError:
-            return ["The folder and its release kept their names, since gh is not available."]
+        except uploader.command.GitHubError:
+            return ["The folder and its release kept their names, since GitHub authentication is unavailable."]
 
         renames = self._rename_releases(old=old, new=new)
         renamed = renames.repos
@@ -83,7 +83,7 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
             try:
                 tags = uploader.releases.list_releases(repo=repo)
 
-            except uploader.command.GhError as error:
+            except uploader.command.GitHubError as error:
                 raise ValueError(f"could not read the releases of {repo}: {error}") from error
 
             if new in tags:
@@ -100,7 +100,7 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
                 with self.github_lock:
                     uploader.releases.rename_release(repo=repo, tag=old, new_tag=new)
 
-            except uploader.command.GhError as error:
+            except uploader.command.GitHubError as error:
                 self._undo_releases(repos=done, old=old, new=new)
 
                 raise ValueError(f"could not rename the release in {repo}: {error}") from error
@@ -125,7 +125,7 @@ class CatalogMoves(Jobs, GitHubJob, ReleaseStates):
                 with self.github_lock:
                     uploader.releases.rename_release(repo=repo, tag=new, new_tag=old)
 
-            except uploader.command.GhError as error:
+            except uploader.command.GitHubError as error:
                 self._log_github(text=f"Could not rename release {new} back to {old} in {repo}: {error}", level="error")
 
                 continue

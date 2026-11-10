@@ -111,7 +111,7 @@ def extract_folder(archive: Path, root: Path, place: Path) -> str:
         tops = {name.split(sep="/")[0] for name in source.namelist()}
 
         if len(tops) != 1 or not next(iter(tops)) or ".." in tops:
-            raise command.GhError("zip does not contain exactly one top folder")
+            raise command.GitHubError("zip does not contain exactly one top folder")
 
         top = next(iter(tops))
         source.extractall(path=place / "out")

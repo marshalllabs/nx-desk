@@ -1,95 +1,73 @@
 import hashlib
 import http.client
-import shutil
 import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional
 from unittest import mock
 
 from nx_desk import uploader, zips
+from nx_desk.schemas.common import Progress
 from nx_desk.utils.callbacks import quiet
 from tests.helpers import asset
 
 
-class RateLimitTests(unittest.TestCase):
-    def test_gh_waits_and_tries_again_when_github_asks(self) -> None:
-        limited = uploader.command.GhError("HTTP 403: You have exceeded a secondary rate limit")
+class ApiRetryTests(unittest.TestCase):
+    def run_request(self, method: str, errors: List[Exception]) -> mock.MagicMock:
+        reply = mock.MagicMock()
+        reply.read.return_value = b'"ok"'
 
         with (
-            mock.patch.object(target=shutil, attribute="which", return_value="gh"),
-            mock.patch.object(target=uploader.command, attribute="run_gh", side_effect=[limited, "ok"]) as run,
-            mock.patch.object(target=time, attribute="sleep") as sleep,
+            mock.patch.object(target=uploader.api, attribute="response") as response,
+            mock.patch.object(target=uploader.api, attribute="check", side_effect=[*errors, None]) as check,
+            mock.patch.object(target=time, attribute="sleep"),
         ):
-            self.assertEqual(first=uploader.command.gh("api", "x"), second="ok")
+            response.return_value.__enter__.return_value = reply
+            self.assertEqual(first=uploader.api.request(path="synthetic", method=method), second="ok")
 
-        self.assertEqual(first=run.call_count, second=2)
-        sleep.assert_called_once_with(uploader.command.RATE_WAITS[0])
+        return check
+
+    def test_rate_limits_are_retried(self) -> None:
+        limited = uploader.command.GitHubError("HTTP 403: rate limit", status=403)
+        self.assertEqual(first=self.run_request(method="GET", errors=[limited]).call_count, second=2)
+
+    def test_repeatable_server_errors_are_retried(self) -> None:
+        broken = uploader.command.GitHubError("HTTP 502", status=502)
+
+        for method in ("GET", "PATCH", "DELETE"):
+            self.assertEqual(first=self.run_request(method=method, errors=[broken, broken]).call_count, second=3)
+
+    def test_network_errors_retry_only_repeatable_requests(self) -> None:
+        broken = uploader.command.NetworkError("interrupted")
+        self.assertEqual(first=self.run_request(method="GET", errors=[broken]).call_count, second=2)
+
+        with self.assertRaises(expected_exception=uploader.command.NetworkError):
+            self.run_request(method="POST", errors=[broken])
+
+    def test_creating_a_release_is_not_retried_after_server_error(self) -> None:
+        broken = uploader.command.GitHubError("HTTP 502", status=502)
+
+        with self.assertRaises(expected_exception=uploader.command.GitHubError):
+            self.run_request(method="POST", errors=[broken])
+
+    def test_rate_retries_are_bounded(self) -> None:
+        limited = uploader.command.GitHubError("HTTP 429: rate limit", status=429)
+
+        with self.assertRaises(expected_exception=uploader.command.GitHubError):
+            self.run_request(method="GET", errors=[limited] * (len(uploader.command.RATE_WAITS) + 1))
 
     def test_other_errors_are_not_retried(self) -> None:
-        with (
-            mock.patch.object(target=shutil, attribute="which", return_value="gh"),
-            mock.patch.object(
-                target=uploader.command,
-                attribute="run_gh",
-                side_effect=uploader.command.GhError("HTTP 404"),
-            ) as run,
-            self.assertRaises(expected_exception=uploader.command.GhError),
+        with self.assertRaises(expected_exception=uploader.command.GitHubError):
+            self.run_request(method="GET", errors=[uploader.command.GitHubError("HTTP 404", status=404)])
+
+    def test_deleting_a_missing_file_succeeds(self) -> None:
+        with mock.patch.object(
+            target=uploader.api,
+            attribute="request",
+            side_effect=uploader.command.GitHubError("HTTP 404", status=404),
         ):
-            uploader.command.gh("api", "x")
-
-        self.assertEqual(first=run.call_count, second=1)
-
-    def test_it_gives_up_after_the_last_wait(self) -> None:
-        limited = uploader.command.GhError("API rate limit exceeded")
-
-        with (
-            mock.patch.object(target=shutil, attribute="which", return_value="gh"),
-            mock.patch.object(target=uploader.command, attribute="run_gh", side_effect=limited) as run,
-            mock.patch.object(target=time, attribute="sleep"),
-            self.assertRaises(expected_exception=uploader.command.GhError),
-        ):
-            uploader.command.gh("api", "x")
-
-        self.assertEqual(first=run.call_count, second=len(uploader.command.RATE_WAITS) + 1)
-
-
-class ServerErrorTests(unittest.TestCase):
-    def run_gh(self, args: Tuple[str, ...], failures: int) -> mock.MagicMock:
-        broken = uploader.command.GhError("gh: Server Error (HTTP 502)")
-
-        with (
-            mock.patch.object(target=shutil, attribute="which", return_value="gh"),
-            mock.patch.object(
-                target=uploader.command,
-                attribute="run_gh",
-                side_effect=[broken] * failures + ["ok"],
-            ) as run,
-            mock.patch.object(target=time, attribute="sleep"),
-        ):
-            uploader.command.gh(*args)
-
-        return run
-
-    def test_a_repeatable_call_is_sent_again(self) -> None:
-        for args in (("api", "repos/me/mods/releases"), ("api", "-X", "PATCH", "x"), ("api", "-X", "DELETE", "x")):
-            self.assertEqual(first=self.run_gh(args=args, failures=2).call_count, second=3)
-
-    def test_a_call_that_creates_something_is_not_sent_again(self) -> None:
-        for args in (("release", "create", "tag"), ("api", "-X", "POST", "x")):
-            with self.assertRaises(expected_exception=uploader.command.GhError):
-                self.run_gh(args=args, failures=1)
-
-    def test_it_gives_up_after_the_last_wait(self) -> None:
-        with self.assertRaises(expected_exception=uploader.command.GhError):
-            self.run_gh(args=("api", "x"), failures=len(uploader.command.SERVER_WAITS) + 1)
-
-    def test_deleting_a_file_already_gone_succeeds(self) -> None:
-        gone = uploader.command.GhError("HTTP 404: Not Found")
-
-        with mock.patch.object(target=uploader.command, attribute="gh", side_effect=gone):
             uploader.releases.delete_asset(repo="me/mods", asset=asset(name="a.zip"))
 
 
@@ -106,19 +84,17 @@ class TransferRetryTests(unittest.TestCase):
     def fetch(self, failures: Iterable[Optional[str]]) -> mock.MagicMock:
         errors = iter(failures)
 
-        def fake(*args: str) -> str:
+        def fake(repo: str, asset_id: int, target: Path, moved: Progress) -> None:
             error = next(errors, None)
 
             if error:
                 (self.place / "a.zip").write_bytes(data=b"cut")
-                raise uploader.command.GhError(error)
+                raise uploader.command.GitHubError(error)
 
             (self.place / "a.zip").write_bytes(data=b"new")
 
-            return ""
-
         with (
-            mock.patch.object(target=uploader.command, attribute="gh", new=fake),
+            mock.patch.object(target=uploader.download, attribute="asset", new=fake),
             mock.patch.object(target=time, attribute="sleep") as sleep,
         ):
             uploader.parts.download_group(
@@ -139,11 +115,11 @@ class TransferRetryTests(unittest.TestCase):
         self.assertTrue(expr=any("trying again" in line for line in self.lines))
 
     def test_it_gives_up_after_the_last_wait(self) -> None:
-        with self.assertRaises(expected_exception=uploader.command.GhError):
+        with self.assertRaises(expected_exception=uploader.command.GitHubError):
             self.fetch(failures=["connection reset by peer"] * (len(uploader.progress.NETWORK_WAITS) + 1))
 
     def test_other_errors_fail_at_once(self) -> None:
-        with self.assertRaises(expected_exception=uploader.command.GhError):
+        with self.assertRaises(expected_exception=uploader.command.GitHubError):
             self.fetch(failures=["HTTP 404: Not Found"])
 
         self.assertFalse(expr=any("trying again" in line for line in self.lines))
@@ -165,7 +141,7 @@ class PostAssetTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def respond(self, status: int, body: bytes = b"{}") -> None:
-        self.connection.getresponse.return_value = mock.MagicMock(status=status, read=lambda: body)
+        self.connection.getresponse.return_value = mock.MagicMock(status=status, read=lambda size=-1: body)
 
     def test_sends_the_file_in_counted_pieces_to_the_upload_host_only(self) -> None:
         self.respond(status=201)
@@ -185,7 +161,7 @@ class PostAssetTests(unittest.TestCase):
     def test_a_refusal_reports_githubs_message_and_never_the_token(self) -> None:
         self.respond(status=403, body=b'{"message": "You have exceeded a secondary rate limit"}')
 
-        with self.assertRaises(expected_exception=uploader.command.GhError) as caught:
+        with self.assertRaises(expected_exception=uploader.command.GitHubError) as caught:
             uploader.upload.post_asset(repo="me/mods", release=7, path=self.path, token="secret", moved=quiet)
 
         self.assertIn(member="rate limit", container=str(caught.exception))

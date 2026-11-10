@@ -10,7 +10,7 @@
 - Several catalogs, each with its own downloads, art and state.
 - Resumable downloads with mirrors, SHA-256 checks and update detection.
 - Every mod repacked into one layout, at the compression level you choose.
-- Upload to and download from GitHub releases through `gh`.
+- Upload to and download from GitHub releases through the GitHub REST API.
 - Ports, Homebrews and Title IDs lists.
 - Updates itself from public GitHub releases; the release repository must be public for update checks and downloads.
 
@@ -43,13 +43,13 @@
 - **Upload to GitHub** sends each finished mod to the release named after the catalog folder.
    - **Delete local copy** removes it from disk once the release records it.
 - Search, **Genres** and **Status** filter the list; ≡ switches between **List** and **Grid**.
-- Editing a catalog's **Name** also renames its folder and, with `gh` signed in, its release.
-- **Settings** (Ctrl+,): font, compression, size units, SteamGridDB key, notifications, log folder.
+- Editing a catalog's **Name** also renames its folder and, with a configured GitHub token, its release.
+- **Settings** (Ctrl+,): font, compression, size units, SteamGridDB key, GitHub token, notifications, log folder.
 - Keys: Ctrl+Q quits, Ctrl+PgUp/PgDown switches tabs, Ctrl+F searches.
 
 ## GitHub tab
 
-- Moves mod folders between a source folder and a GitHub release, using your `gh` login.
+- Moves mod folders between a source folder and a GitHub release, using a personal access token saved in the system keyring.
 - A mod folder is `<Game> - [<mod>] - [<version>]` and holds a zip of the same name.
 - Zips over 2 GB are split into parts and joined again on download.
 - Uploads replace the old file; the app keeps no backups.
@@ -57,6 +57,18 @@
 - **Compare** shows the chosen release beside another one.
 - **Retry** runs the last failed upload or download again.
 - **Delete after upload** removes each source folder once its upload is recorded.
+
+## GitHub authentication
+
+- In **Settings > GitHub**, paste a personal access token and select **Apply** or **Save**.
+- Use a fine-grained PAT for the destination owner and repositories with **Contents: Read and write**.
+- Organization repositories may require owner approval; a pending or expired token cannot upload.
+- Public repositories and releases can remain readable even when not selected for the PAT.
+- Seeing a repository in the picker does not mean the token can write to it; writes require access to that repository.
+- Tokens stay in the system keyring; settings store only whether one is saved.
+- Unlock or enable the system keyring if saving fails; tokens have no plaintext or file-based fallback.
+- Use **Remove** and apply to forget the token. Saved tokens are never displayed in Settings.
+- GitHub CLI is no longer required; existing CLI authentication is not imported.
 
 ## Release state
 
@@ -99,7 +111,7 @@
 
 ## Development
 
-- Python 3.12, [uv](https://docs.astral.sh/uv/) and the [GitHub CLI](https://cli.github.com/).
+- Python 3.12 and [uv](https://docs.astral.sh/uv/).
 - On Linux under X11, Qt also needs `libxcb-cursor0` (Debian/Ubuntu) or `xcb-util-cursor` (Arch).
 - From source, data lives in `.data/`, which git ignores.
 

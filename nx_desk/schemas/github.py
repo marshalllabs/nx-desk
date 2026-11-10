@@ -120,7 +120,7 @@ class CompareRow(BaseModel):
 
 class UploadSnapshot(UploadJob):
     log: List[LogEntry]
-    gh_ready: Optional[bool]
+    github_ready: Optional[bool]
 
 
 # A saved mod waiting for its automatic upload.

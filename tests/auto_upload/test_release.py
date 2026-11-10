@@ -1,5 +1,4 @@
 import json
-from typing import List, Tuple
 from unittest import mock
 
 from nx_desk import uploader, vault
@@ -32,19 +31,12 @@ class ReleaseUploadTests(AutoUploadCase):
 
     def test_uses_its_own_repository_not_the_github_tab(self) -> None:
         self.store.set_upload_settings(source="", repo="me/other", tag="")
-        calls: List[Tuple[str, ...]] = []
-        real = self.hub.__call__
-
-        def spy(*args: str) -> str:
-            calls.append(args)
-
-            return real(*args)
-
-        with mock.patch.object(target=uploader.command, attribute="gh", new=spy):
+        with mock.patch.object(target=uploader.api, attribute="request", wraps=self.hub.request) as request:
             self.download(item=mod(name="Game", sha256="", game_version="1.0"))
 
-        used = {arg for call in calls for arg in call if arg in ("me/mods", "me/other")}
-        self.assertEqual(first=used, second={"me/mods"})
+        used = [call.kwargs["path"] for call in request.call_args_list]
+        self.assertTrue(expr=any("repos/me/mods/" in path for path in used))
+        self.assertFalse(expr=any("repos/me/other/" in path for path in used))
 
     def test_a_state_read_from_another_repository_is_not_cached(self) -> None:
         data: ReleaseState = ReleaseState(repo="me/other", tag="my-catalog", digest="", mods={"game": ReleaseRecord()})
@@ -70,6 +62,6 @@ class ReleaseUploadTests(AutoUploadCase):
         self.assertEqual(first=self.store.snapshot().batch.upload_failed, second=0)
 
     def test_gh_signed_out_skips_the_upload(self) -> None:
-        self.store.gh_ready = False
+        self.store.github_ready = False
         self.download(item=mod(name="Game", sha256="", game_version="1.0"))
         self.assertEqual(first=self.hub.assets, second={})

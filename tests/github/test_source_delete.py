@@ -37,7 +37,7 @@ class DeleteAfterUploadTests(GitHubCase):
     def test_a_failed_state_write_keeps_the_folder(self) -> None:
         self.store.set_upload_delete(enabled=True)
         self.store.scan_upload()
-        broken = uploader.command.GhError("HTTP 502")
+        broken = uploader.command.GitHubError("HTTP 502")
 
         with mock.patch.object(target=vault.Vault, attribute="_record_in_state", side_effect=broken):
             self.store.upload_folders(names=[HADES])
