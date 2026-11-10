@@ -1,0 +1,58 @@
+{
+  "cases": [
+    {
+      "name": "legacy_missing_game_version",
+      "record": {"sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "version": "v1", "folder": "Old Name - [VI] - [1.0.2]", "files": ["Existing.zip"]},
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "v1", "game_version": "Update v1.0.2",
+      "expected": true, "expected_game_version": "1.0.2", "names": ["existing.zip"], "expected_assets": true
+    },
+    {
+      "name": "same_hash_different_metadata",
+      "record": {"sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "v1", "game_version": "1.0.0", "folder": "Different Name", "files": ["existing.zip"]},
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "v2", "game_version": "1.0.2",
+      "expected": true, "expected_game_version": "1.0.0", "names": ["existing.zip"], "expected_assets": true
+    },
+    {
+      "name": "different_hash_same_version",
+      "record": {"sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "version": "v1", "files": ["existing.zip"]},
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "v1", "game_version": "",
+      "expected": false, "expected_game_version": "", "names": ["existing.zip"], "expected_assets": true
+    },
+    {
+      "name": "version_fallback_normalized_legacy_folder",
+      "record": {"version": "v1", "folder": "Legacy - [VI] - [1.0.2]", "files": ["existing.zip"]},
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "v1", "game_version": "Update v1.0.2 (v65536)",
+      "expected": true, "expected_game_version": "1.0.2", "names": ["existing.zip"], "expected_assets": true
+    },
+    {
+      "name": "version_fallback_changed_mod",
+      "record": {"version": "v1", "folder": "Legacy - [VI] - [1.0.2]", "files": ["existing.zip"]},
+      "sha256": "", "version": "v2", "game_version": "1.0.2",
+      "expected": false, "expected_game_version": "1.0.2", "names": ["existing.zip"], "expected_assets": true
+    },
+    {
+      "name": "version_fallback_changed_game",
+      "record": {"version": "v1", "game_version": "1.0.0", "files": ["existing.zip"]},
+      "sha256": "", "version": "v1", "game_version": "1.0.2",
+      "expected": false, "expected_game_version": "1.0.0", "names": ["existing.zip"], "expected_assets": true
+    },
+    {
+      "name": "version_fallback_unknown_game",
+      "record": {"version": "v1", "files": ["existing.zip"]},
+      "sha256": "", "version": "v1", "game_version": "1.0.2",
+      "expected": true, "expected_game_version": "", "names": ["existing.zip"], "expected_assets": true
+    },
+    {
+      "name": "no_content_identity",
+      "record": {"folder": "Legacy - [VI] - [Miss]", "files": []},
+      "sha256": "", "version": "", "game_version": "",
+      "expected": false, "expected_game_version": "", "names": [], "expected_assets": false
+    },
+    {
+      "name": "missing_split_part",
+      "record": {"version": "v1", "files": ["existing.zip.001", "existing.zip.002"]},
+      "sha256": "", "version": "v1", "game_version": "",
+      "expected": true, "expected_game_version": "", "names": ["existing.zip.001"], "expected_assets": false
+    }
+  ]
+}

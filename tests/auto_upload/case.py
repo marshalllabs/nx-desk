@@ -9,7 +9,7 @@ from unittest import mock
 from nx_desk import net, uploader, vault
 from nx_desk.schemas.catalog import Catalog, Mod
 from nx_desk.schemas.download import Fetched
-from nx_desk.schemas.state import ReleaseRecord
+from nx_desk.schemas.release_state import ReleaseRecord
 from nx_desk.utils.json import parse_json
 from tests.helpers import TITLE, FakeGitHub, mod
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict
 
 from ..schemas.github import Asset
-from ..schemas.state import ReleaseDocument, ReleaseRecord
+from ..schemas.release_state import ReleaseDocument, ReleaseRecord
 from ..utils.files import sha256_of
 from . import archive, command, releases, upload
 
@@ -12,11 +12,7 @@ STATE_ASSET = "state.json"
 
 
 def clean_state(data: object) -> Dict[str, ReleaseRecord]:
-    try:
-        document = ReleaseDocument.model_validate(obj=data)
-
-    except ValueError:
-        return {}
+    document = ReleaseDocument.model_validate(obj=data)
 
     return dict(document.mods)
 

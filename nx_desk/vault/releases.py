@@ -4,7 +4,8 @@ from typing import Collection, Dict, List, Optional, Set
 from .. import uploader
 from ..config import STATE_FILE
 from ..schemas.github import Asset
-from ..schemas.state import DOWNLOAD_RECORDS, ReleaseRecord
+from ..schemas.release_state import ReleaseRecord
+from ..schemas.state import DOWNLOAD_RECORDS
 from .release_state import ReleaseStates
 from .source import UploadSource
 
@@ -68,8 +69,9 @@ class Releases(UploadSource, ReleaseStates):
             schema=DOWNLOAD_RECORDS,
             default={},
         )
-        by_folder = {record.file.split(sep="/")[0]: (entry_id, record) for entry_id, record in records.items()}
-        known = [name for name in folder_names if name in by_folder]
+        known = [
+            name for name in folder_names if any(record.file.split(sep="/")[0] == name for record in records.values())
+        ]
 
         for name in sorted(set(folder_names) - set(known)):
             self._log_folder(
@@ -82,14 +84,19 @@ class Releases(UploadSource, ReleaseStates):
             return
 
         def change(mods: Dict[str, ReleaseRecord], assets: Dict[str, Asset]) -> None:
-            for name in known:
-                entry_id, record = by_folder[name]
+            for entry_id, record in records.items():
+                name = record.file.split(sep="/")[0]
+
+                if name not in known:
+                    continue
+
                 files = list(uploader.parts.owned_assets(stem=uploader.archive.asset_stem(name=name), assets=assets))
                 mods[entry_id] = self._state_record(
                     sha256=record.sha256,
                     version=record.version,
                     folder=name,
                     files=files,
+                    game_version=record.game_version,
                 )
 
         self._write_release_state(repo=repo, tag=tag, change=change)

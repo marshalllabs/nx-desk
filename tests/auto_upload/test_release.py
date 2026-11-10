@@ -3,7 +3,8 @@ from typing import List, Tuple
 from unittest import mock
 
 from nx_desk import uploader, vault
-from nx_desk.schemas.state import ReleaseRecord, ReleaseState
+from nx_desk.schemas.release_state import ReleaseRecord
+from nx_desk.schemas.state import ReleaseState
 from tests.auto_upload.case import AutoUploadCase
 from tests.helpers import mod
 

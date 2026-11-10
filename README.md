@@ -58,6 +58,16 @@
 - **Retry** runs the last failed upload or download again.
 - **Delete after upload** removes each source folder once its upload is recorded.
 
+## Release state
+
+- NX Desk and NX Index follow the same [release state contract](docs/release-state.md).
+- Automatic uploads, manual uploads and recovered records write the original checksum and game version.
+- Original checksum equality takes priority over version metadata; legacy missing fields do not force downloads.
+- Without matching checksum fields, use mod versions and known game versions as a fallback.
+- Metadata repairs preserve uploaded files, their folder and upload time; IDs sharing a file keep their own records.
+- Missing recorded assets count as missing uploads; invalid remote state is never replaced with empty state.
+- Refresh release state to see changes made by the other application; use one writer per release.
+
 ## Other tabs
 
 - **Switch Ports**: ports and emulators, as a list or a grid, from `NX_DESK_PORTS_URL`.

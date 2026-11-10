@@ -1,18 +1,16 @@
-import json
 import shutil
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
-
-from pydantic_core import to_jsonable_python
 
 from .. import uploader
 from ..config import STATE_FILE
 from ..schemas.catalog import Catalog, Mod
 from ..schemas.github import Asset
-from ..schemas.state import DOWNLOAD_RECORDS, RELEASE_STATE, ReleaseRecord, ReleaseState
+from ..schemas.release_state import ReleaseDocument, ReleaseRecord
+from ..schemas.state import DOWNLOAD_RECORDS, RELEASE_STATE, ReleaseState
 from ..utils.dates import parse_time
+from ..utils.release_state import assets_present, build_record, content_matches, find_record, refresh_metadata
 from .logs import Logs
 
 # Changes the mods of state.json, given the release files as they are now.
@@ -36,7 +34,17 @@ class ReleaseStates(Logs):
         mods = cache.mods or {}
 
         # Entries of one file share its upload, which state.json may hold under either.
-        return next((mods[other] for other in self._ids_of(entry=entry) if other in mods), None)
+        found = next(
+            (
+                mods[other]
+                for other in self._ids_of(entry=entry)
+                if other in mods and (cache.assets is None or assets_present(record=mods[other], names=cache.assets))
+            ),
+            None,
+        )
+        found = found or find_record(records=mods, entry_id=entry.id, sha256=entry.sha256)
+
+        return found if found and (cache.assets is None or assets_present(record=found, names=cache.assets)) else None
 
     def _read_release_state(self, repo: str, tag: str, assets: Dict[str, Asset]) -> ReleaseState:
         path = self._release_cache(folder=tag)
@@ -61,7 +69,7 @@ class ReleaseStates(Logs):
             finally:
                 shutil.rmtree(path=place, ignore_errors=True)
 
-        data: ReleaseState = ReleaseState(repo=repo, tag=tag, digest=digest, mods=mods)
+        data: ReleaseState = ReleaseState(repo=repo, tag=tag, digest=digest, mods=mods, assets=list(assets))
         self._keep_release_state(tag=tag, data=data)
 
         return data
@@ -137,19 +145,13 @@ class ReleaseStates(Logs):
         files: List[str],
         game_version: str = "",
     ) -> ReleaseRecord:
-        record: ReleaseRecord = ReleaseRecord(
+        return build_record(
             sha256=sha256 or "",
             version=version or "",
+            game_version=game_version,
             folder=folder,
-            files=sorted(files),
+            files=files,
         )
-
-        if game_version:
-            record.game_version = game_version
-
-        record.uploaded_at = datetime.now(tz=UTC).isoformat(timespec="seconds")
-
-        return record
 
     # Mods on the release that state.json lacks, such as after an upload cut off midway, found
     # through the catalog's download records. A file name does not carry the mod version, so a
@@ -184,6 +186,7 @@ class ReleaseStates(Logs):
                     version=record.version,
                     folder=folder,
                     files=list(files),
+                    game_version=record.game_version,
                 )
 
         return found
@@ -202,14 +205,39 @@ class ReleaseStates(Logs):
 
         change(mods, assets)
         catalog = self.linked_catalog(tag=tag)
-        body = {"version": 1, "catalog": catalog.url if catalog else "", "mods": mods}
+
+        with self.lock:
+            entries = list(self.items) if catalog and self.catalog and self.catalog.folder == tag else []
+
+        for entry in entries:
+            record = find_record(records=mods, entry_id=entry.id, sha256=entry.sha256)
+
+            if (
+                record
+                and assets_present(record=record, names=list(assets))
+                and content_matches(
+                    record=record,
+                    sha256=entry.sha256,
+                    version=entry.version,
+                    game_version=entry.game_version,
+                )
+            ):
+                mods[entry.id] = refresh_metadata(
+                    record=record,
+                    sha256=entry.sha256,
+                    version=entry.version,
+                    game_version=entry.game_version,
+                    names=list(assets),
+                )
+
+        body = ReleaseDocument(catalog=catalog.url if catalog else "", mods=mods)
         self.parts.mkdir(exist_ok=True)
         place = Path(tempfile.mkdtemp(prefix="state-", dir=self.parts))
 
         try:
             path = place / uploader.state.STATE_ASSET
             path.write_text(
-                data=json.dumps(obj=to_jsonable_python(body), ensure_ascii=False, indent=1),
+                data=body.model_dump_json(indent=1),
                 encoding="utf-8",
             )
             digest = uploader.state.replace_asset(repo=repo, tag=tag, path=path)

@@ -4,8 +4,10 @@ from typing import List, Optional, Union
 
 from ..names import display_version, folder_version, game_folder, safe_name, version_label
 from ..schemas.catalog import Mod
+from ..schemas.release_state import ReleaseRecord
 from ..schemas.snapshot import ModRow, Snapshot
-from ..schemas.state import DownloadRecord, EntryStatus, ReleaseRecord
+from ..schemas.state import DownloadRecord, EntryStatus
+from ..utils.release_state import content_matches, saved_game_version
 from .jobs import Jobs
 from .release_state import ReleaseStates
 
@@ -58,10 +60,14 @@ class Statuses(Jobs, ReleaseStates):
             if not remote:
                 return EntryStatus(status="missing")
 
-            if entry.sha256 and remote.sha256:
-                return EntryStatus(status="ok" if remote.sha256 == entry.sha256 else "update", remote=remote)
+            matches = content_matches(
+                record=remote,
+                sha256=entry.sha256,
+                version=entry.version,
+                game_version=entry.game_version,
+            )
 
-            return EntryStatus(status="ok" if remote.version == entry.version else "update", remote=remote)
+            return EntryStatus(status="ok" if matches else "update", remote=remote)
 
         return EntryStatus(status=self._local_status(entry=entry, zips=zips))
 
@@ -87,6 +93,9 @@ class Statuses(Jobs, ReleaseStates):
     # Records from before game versions were stored still name their folder after it.
     @staticmethod
     def _saved_game_version(record: Union[DownloadRecord, ReleaseRecord]) -> str:
+        if isinstance(record, ReleaseRecord):
+            return saved_game_version(record=record)
+
         if game_version := record.game_version:
             return game_version
 

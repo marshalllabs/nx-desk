@@ -8,6 +8,7 @@ from ..config import user_agent
 from ..schemas.api import GitHubError, ReleasePayload
 from ..schemas.common import Progress, Report
 from ..utils.callbacks import quiet
+from ..utils.release_state import find_asset_name
 from . import command, progress, releases
 
 UPLOAD_HOST = "uploads.github.com"
@@ -73,7 +74,9 @@ def upload_file(
 ) -> None:
     def send() -> None:
         moved(0)
-        old = releases.remote_assets(repo=repo, tag=tag).get(path.name)
+        assets = releases.remote_assets(repo=repo, tag=tag)
+        old_name = find_asset_name(name=path.name, names=list(assets))
+        old = assets.get(old_name) if old_name else None
 
         if old:
             releases.delete_asset(repo=repo, asset=old)

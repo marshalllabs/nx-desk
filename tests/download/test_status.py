@@ -2,7 +2,8 @@ import tempfile
 import unittest
 
 from nx_desk import names, vault
-from nx_desk.schemas.state import DownloadRecord, ReleaseRecord
+from nx_desk.schemas.release_state import ReleaseRecord
+from nx_desk.schemas.state import DownloadRecord
 from tests.helpers import mod
 
 

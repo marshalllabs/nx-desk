@@ -85,6 +85,10 @@
 - Entries sharing a file share a download and saved folder; record every twin after completion.
 - Disk contents determine whether a mod exists locally; records identify its release.
 - Linked release `state.json` writes run under `github_lock`, read first and replace through a temporary asset.
+- Follow `docs/release-state.md`; keep the release schema, helpers and shared fixture identical to NX Index.
+  - Original checksum equality takes priority; otherwise compare mod versions and known game versions.
+  - Preserve actual asset paths and upload timestamps during metadata repair; reject malformed remote state.
+  - Manual uploads, automatic uploads and recovered records must all write game versions and shared file IDs.
 - Delete a local copy only after its upload and release-state write succeed.
 - Local deletion must stay below the source folder, never delete that folder or its ancestors.
 - Preserve typed confirmations for destructive operations and rollback on failed linked catalog/release renames.

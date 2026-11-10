@@ -9,7 +9,7 @@ from ..names import clean_game_name
 from ..schemas.catalog import Mod
 from ..schemas.download import Outcome
 from ..schemas.github import Asset, AutoMod, AutoUpload, FolderRef
-from ..schemas.state import ReleaseRecord
+from ..schemas.release_state import ReleaseRecord
 from ..utils.files import tree_size
 from ..zips import Cancelled
 from .jobs import Jobs

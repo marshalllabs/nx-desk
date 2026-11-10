@@ -16,7 +16,10 @@ PART_SUFFIX = re.compile(pattern=r"\.\d{3}$")
 
 # Files of one folder whatever version they carry, so a new version replaces the old file.
 def owned_assets(stem: str, assets: Dict[str, Asset]) -> Dict[str, Asset]:
-    pattern = re.compile(pattern=rf"^{re.escape(pattern=stem)}(-(v?\d|miss)[A-Za-z0-9._-]*)?\.zip(\.\d{{3}})?$")
+    pattern = re.compile(
+        pattern=rf"^{re.escape(pattern=stem)}(-(v?\d|miss)[A-Za-z0-9._-]*)?\.zip(\.\d{{3}})?$",
+        flags=re.IGNORECASE,
+    )
 
     return {name: asset for name, asset in assets.items() if pattern.match(string=name)}
 
