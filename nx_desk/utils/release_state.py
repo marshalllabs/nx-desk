@@ -9,8 +9,13 @@ GAME_VERSION = re.compile(pattern=r"v?(\d+(?:\.\d+)*)", flags=re.IGNORECASE)
 
 
 def find_record(records: Mapping[str, ReleaseRecord], entry_id: str, sha256: str) -> Optional[ReleaseRecord]:
-    if entry_id in records:
-        return records[entry_id]
+    direct = records.get(entry_id)
+
+    if direct is not None and (
+        direct.failure is None
+        or any((direct.sha256, direct.version, direct.game_version, direct.folder, direct.files, direct.uploaded_at))
+    ):
+        return direct
 
     digest = sha256.strip().lower()
 

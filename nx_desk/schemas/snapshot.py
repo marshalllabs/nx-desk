@@ -11,6 +11,7 @@ from .update import AppUpdate, UpdateJob
 # A game as the Catalog tab shows it.
 class ModRow(Mod):
     status: str
+    source_failures: int = 0
     remote: bool
     local_version: str
     local_game_version: str

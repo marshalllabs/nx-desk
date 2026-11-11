@@ -118,6 +118,7 @@ class Statuses(Jobs, ReleaseStates):
                 row = ModRow(
                     **entry.model_dump(),
                     status=status,
+                    source_failures=self._source_failures(entry=entry) if status != "ok" else 0,
                     remote=remote is not None,
                     local_version=saved.version,
                     local_game_version=self._saved_game_version(record=saved),

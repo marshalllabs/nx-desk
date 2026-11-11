@@ -71,6 +71,9 @@ def status_text(item: ModRow) -> str:
             "deleting": "Deleting local copy",
         }[job.phase]
 
+    if item.source_failures:
+        return "Source failed (paused)" if item.source_failures >= 3 else f"Source failed ({item.source_failures}/3)"
+
     if item.status == "update":
         return "Update available"
 
@@ -151,7 +154,7 @@ def row_tag(item: ModRow) -> str:
     if job:
         return "error" if job.phase == "error" else "active"
 
-    return item.status
+    return "error" if item.source_failures else item.status
 
 
 # A filter button names its one pick, or counts several.

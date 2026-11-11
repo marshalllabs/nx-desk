@@ -46,6 +46,7 @@ STATUS_FILTERS: Dict[str, RowFilter] = {
     "new": RowFilter(label="New", predicate=lambda item: item.status == "missing"),
     "update": RowFilter(label="Update", predicate=lambda item: item.status == "update"),
     "downloaded": RowFilter(label="Downloaded", predicate=lambda item: item.status != "missing" and (not item.remote)),
+    "failed": RowFilter(label="Source failed", predicate=lambda item: item.source_failures > 0),
     "online": RowFilter(label="Online only", predicate=lambda item: item.remote),
 }
 

@@ -50,6 +50,18 @@ class RowTextTests(unittest.TestCase):
         self.assertEqual(first=rows.status_text(item=self.item(status="ok", remote=True)), second="Online only")
         self.assertEqual(first=rows.status_text(item=self.item(status="missing")), second="Not downloaded")
 
+    def test_source_failures_show_in_status_and_filter(self) -> None:
+        for count, expected in ((1, "Source failed (1/3)"), (3, "Source failed (paused)")):
+            with self.subTest(count=count):
+                item = self.item(source_failures=count)
+                self.assertEqual(first=rows.status_text(item=item), second=expected)
+                self.assertEqual(first=rows.row_tag(item=item), second="error")
+                self.assertTrue(expr=status_matches(item=item, picked=["failed"]))
+
+        active = self.item(source_failures=3, job=job(phase="downloading", done=50, total=200))
+        self.assertEqual(first=rows.status_text(item=active), second="25%")
+        self.assertEqual(first=rows.row_tag(item=active), second="active")
+
     def test_a_running_job_shows_its_progress(self) -> None:
         running = job(phase="downloading", done=50, total=200)
         self.assertEqual(first=rows.status_text(item=self.item(job=running)), second="25%")

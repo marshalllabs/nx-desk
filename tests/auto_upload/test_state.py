@@ -7,13 +7,33 @@ from unittest import mock
 from nx_desk import names, uploader, vault
 from nx_desk.schemas.common import Progress, Report
 from nx_desk.schemas.github import FolderRef
-from nx_desk.schemas.release_state import ReleaseDocument
+from nx_desk.schemas.release_state import ReleaseDocument, ReleaseFailure, ReleaseRecord
+from nx_desk.schemas.state import ReleaseState
 from nx_desk.utils.callbacks import quiet
 from tests.auto_upload.case import AutoUploadCase
 from tests.helpers import mod
 
 
 class StateTests(AutoUploadCase):
+    def test_source_marker_matches_file_and_catalog_without_auto_delete(self) -> None:
+        item = self.item()
+        self.store.set_auto_delete(enabled=False)
+        self.store.items = [item]
+        self.store.release_state = ReleaseState(
+            repo=self.store.auto_repo,
+            tag="my-catalog",
+            mods={item.id: ReleaseRecord(failure=ReleaseFailure(sha256=item.sha256, size=item.size, count=3))},
+        )
+        self.assertEqual(first=self.store.snapshot().items[0].source_failures, second=3)
+        self.assertEqual(first=self.store.status_of(entry=item), second="missing")
+        self.store.items = [item.model_copy(update={"sha256": "b" * 64})]
+        self.assertEqual(first=self.store.snapshot().items[0].source_failures, second=0)
+        self.store.items = [item.model_copy(update={"size": item.size + 1})]
+        self.assertEqual(first=self.store.snapshot().items[0].source_failures, second=0)
+        self.store.items = [item]
+        self.store.release_state.tag = "another-catalog"
+        self.assertEqual(first=self.store.snapshot().items[0].source_failures, second=0)
+
     def test_manual_upload_keeps_game_version_for_every_shared_file_id(self) -> None:
         self.store.set_auto_upload(enabled=False)
         first, _second = self.store._named(

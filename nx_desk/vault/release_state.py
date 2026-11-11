@@ -46,6 +46,20 @@ class ReleaseStates(GitHubAuth):
 
         return found if found and (cache.assets is None or assets_present(record=found, names=cache.assets)) else None
 
+    def _source_failures(self, entry: Mod) -> int:
+        cache = self.release_state
+
+        if not self.catalog or cache.repo != self.auto_repo or cache.tag != self.catalog.folder:
+            return 0
+
+        record = cache.mods.get(entry.id)
+        failure = record.failure if record else None
+
+        if failure and failure.sha256 == entry.sha256 and failure.size == entry.size:
+            return failure.count
+
+        return 0
+
     def _read_release_state(self, repo: str, tag: str, assets: Dict[str, Asset]) -> ReleaseState:
         path = self._release_cache(folder=tag)
         cache = self._load_model(path=path, schema=RELEASE_STATE, default=ReleaseState())
@@ -101,7 +115,7 @@ class ReleaseStates(GitHubAuth):
         with self.lock:
             tag = self.catalog.folder if self.catalog else ""
             repo = self.auto_repo
-            wanted = self.auto_delete and tag and uploader.releases.REPO_NAME.match(string=repo)
+            wanted = tag and uploader.releases.REPO_NAME.match(string=repo)
 
         if not wanted or not self.github_lock.acquire(blocking=False):
             return None
@@ -212,6 +226,7 @@ class ReleaseStates(GitHubAuth):
             entries = list(self.items) if catalog and self.catalog and self.catalog.folder == tag else []
 
         for entry in entries:
+            direct = mods.get(entry.id)
             record = find_record(records=mods, entry_id=entry.id, sha256=entry.sha256)
 
             if (
@@ -230,7 +245,7 @@ class ReleaseStates(GitHubAuth):
                     version=entry.version,
                     game_version=entry.game_version,
                     names=list(assets),
-                )
+                ).model_copy(update={"failure": direct.failure if direct else None})
 
         body = ReleaseDocument(catalog=catalog.url if catalog else "", mods=mods)
         self.parts.mkdir(exist_ok=True)

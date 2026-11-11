@@ -49,6 +49,12 @@
       "expected": false, "expected_game_version": "", "names": [], "expected_assets": false
     },
     {
+      "name": "failure_only_does_not_identify_an_upload",
+      "record": {"failure": {"sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 10, "count": 3}},
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "version": "v1", "game_version": "",
+      "expected": false, "expected_game_version": "", "names": ["existing.zip"], "expected_assets": false
+    },
+    {
       "name": "missing_split_part",
       "record": {"version": "v1", "files": ["existing.zip.001", "existing.zip.002"]},
       "sha256": "", "version": "v1", "game_version": "",

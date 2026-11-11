@@ -1,11 +1,19 @@
 import re
-from typing import TYPE_CHECKING, Dict, List, Literal
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 
 # Keep this contract identical in both applications.
+class ReleaseFailure(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    size: int = Field(gt=0)
+    count: int = Field(ge=1, le=3)
+
+
 class ReleaseRecord(BaseModel):
     model_config = ConfigDict(extra="allow", validate_assignment=True)
 
@@ -18,6 +26,7 @@ class ReleaseRecord(BaseModel):
     folder: str = ""
     files: List[str] = Field(default_factory=list)
     uploaded_at: str = ""
+    failure: Optional[ReleaseFailure] = Field(default=None, exclude_if=lambda value: value is None)
 
     @field_validator("version", "game_version", "folder", "uploaded_at", mode="before")
     @classmethod
