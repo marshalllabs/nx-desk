@@ -2,9 +2,8 @@
 
 ## Workspace context
 
-- Read `../AGENTS.md` for shared rules and `../STATE.md` for current decisions and progress.
-- Update this project's section in `../STATE.md` after completing a task.
-- Keep repository guidance here; `CLAUDE.md` only imports shared instructions for Claude Code.
+- Follow the suite guidance in `../AGENTS.md`.
+- Keep repository guidance here and user guidance in README. Do not recreate `docs/`.
 - Keep source-specific catalog mapping in nx-index; check both projects before changing their contract.
 
 ## Commands
@@ -48,16 +47,12 @@
 
 - Use four spaces, a 120-character target, `snake_case` names and `PascalCase` classes.
 - Use short comments when needed; do not add docstrings.
-- Fully type parameters, returns and attributes; use Pydantic models for shared structured data.
-- Use collection annotations, `Optional` and `Union` from `typing`; avoid built-in generics and `|` in annotations.
-- Read model fields as attributes, construct with keywords and copy changes with `model_copy(update=...)`.
+- Use `model_copy(update=...)` to copy model values with changes.
 - Mutable job/state models use `validate_assignment`; persisted models use `Vault._load_model` and `TypeAdapter`.
-- Validate external data at entry points; use `cast` only after checking it, with a reason.
-- Pass keyword arguments when supported; preserve real parameter names in test fakes.
-- Separate control blocks with blank lines; split multiline brackets one item per line with trailing commas.
+- Use `cast` only after checking the value, with a reason.
+- Preserve parameter names in test fakes.
+- Use one item per line and trailing commas in multiline brackets.
   - Ruff's `COM812` formatter warning is expected.
-- Keep small reusable helpers in `utils/<topic>.py`; project and third-party imports are allowed.
-  Avoid circular imports; helpers used by only one module stay with that module.
 - Import names from their defining modules; use `TYPE_CHECKING` for type-only cycles.
 - Keep `__init__.py` empty except for the existing `vault` mixin assembly and `uploader` module imports.
 - Call patchable dependencies through their modules: `net.http_get`, `settings.load_config`, `uploader.api.request`.
@@ -86,10 +81,7 @@
 - Entries sharing a file share a download and saved folder; record every twin after completion.
 - Disk contents determine whether a mod exists locally; records identify its release.
 - Linked release `state.json` writes run under `github_lock`, read first and replace through a temporary asset.
-- Follow `docs/release-state.md`; keep the release schema, helpers and shared fixture identical to NX Index.
-  - Original checksum equality takes priority; otherwise compare mod versions and known game versions.
-  - Preserve actual asset paths and upload timestamps during metadata repair; reject malformed remote state.
-  - Manual uploads, automatic uploads and recovered records must all write game versions and shared file IDs.
+- Apply the shared release-state contract to records recovered from existing assets.
 - Delete a local copy only after its upload and release-state write succeed.
 - Local deletion must stay below the source folder, never delete that folder or its ancestors.
 - Preserve typed confirmations for destructive operations and rollback on failed linked catalog/release renames.
@@ -101,7 +93,7 @@
 
 ## Switch SD
 
-- Follow `docs/switch-sd.md`; Qt mount enumeration stays under `ui/switch_sd/`, filesystem work under `switch_sd/`.
+- Keep Qt mount enumeration under `ui/switch_sd/` and filesystem work under `switch_sd/`.
 - Scan only supported mounted volumes with CFW markers; never inspect Nintendo game storage, keys or raw NAND.
 - Content folders are not evidence of installed games; never infer game versions from mod folders.
 - Keep Switch SD read-only: auto-select a card, scan, search and filter; do not add copy/install/removal actions.
@@ -136,7 +128,6 @@
 - If editing `assets/icon.svg`, regenerate `icon.ico`, `icon.icns` and `nx_desk/ui/icon.png`.
 - Use Conventional Commits: `fix:` and `feat:` trigger releases; `docs:`, `chore:`, `refactor:` and `test:` do not.
 - Mark breaking changes with `!` and explain them in the body; avoid the `BREAKING CHANGE:` footer.
-- Follow the parent's publishing-approval and no-attribution rules before committing, pushing or publishing.
 
 ## Validation
 
@@ -145,5 +136,5 @@
 - Use `make test` or `python -B -m tests.run [module ...]` so configuration, keyring and external I/O
   are isolated before discovery. Use ordinary fixture filenames, never secret-file names.
 - Run `make test` and `make lint` for code changes; tool settings live in their own configuration files.
-- For UI changes, load the required skill and preserve `ui/theme.py` tokens, shared widgets and accessibility.
+- Preserve `ui/theme.py` tokens, shared widgets and accessibility in UI changes.
 - Describe behavior and validation in reviews; consult the code and README for detailed feature behavior.
